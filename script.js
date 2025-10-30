@@ -1,22 +1,76 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- MAPA DE IMÁGENES CORREGIDO ---
+    // Ahora coincide con los nombres de tus archivos.
+    const imageMap = {
+        'default': 'pictures/default.jpg',
+        'd1': 'pictures/d1.jpg',
+        'd2': 'pictures/d2.jpg',
+        'd3': 'pictures/d3.jpg',
+        'd4': 'pictures/d4.jpg',
+        'd5': 'pictures/d5.jpg',
+        'd6': 'pictures/d6.jpg',
+        'd7': 'pictures/d7.jpg'
+    };
+    // --- FIN DE LA CORRECCIÓN ---
+
     const CONTAINER_SIZE = 400;
     const GRID_SIZE = 4;
     const TILE_COUNT = GRID_SIZE * GRID_SIZE;
     const TILE_SIZE = CONTAINER_SIZE / GRID_SIZE;
-    const CONFETTI_COUNT = 50; // Cantidad de piezas de confeti
 
     const container = document.getElementById('puzzle-container');
     const message = document.getElementById('message');
     const shuffleButton = document.getElementById('shuffle-button');
     const externalLinkButton = document.getElementById('external-link-button');
     const confettiContainer = container.querySelector('.confetti-container');
-
+    
     const pieceElements = {}; 
     let tiles = [];
     let isGameActive = false;
+    const colorThief = new ColorThief();
 
     const solvedState = Array.from({ length: TILE_COUNT - 1 }, (_, i) => i + 1).concat(0);
     const fullState = Array.from({ length: TILE_COUNT }, (_, i) => i + 1);
+
+    function setPuzzleImage(imageUrl) {
+        const urlWithPath = `url('${imageUrl}')`;
+        document.documentElement.style.setProperty('--puzzle-image', urlWithPath);
+
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.src = imageUrl;
+
+        img.onload = () => {
+            try {
+                const dominantColor = colorThief.getColor(img);
+                const colorRgb = `rgb(${dominantColor[0]}, ${dominantColor[1]}, ${dominantColor[2]})`;
+                
+                shuffleButton.style.backgroundColor = colorRgb;
+                
+                const luminance = (0.299 * dominantColor[0] + 0.587 * dominantColor[1] + 0.114 * dominantColor[2]) / 255;
+                shuffleButton.style.color = luminance > 0.5 ? '#000' : '#fff';
+            } catch (e) {
+                console.error("Error al procesar el color de la imagen:", e);
+                shuffleButton.style.backgroundColor = '#007bff';
+                shuffleButton.style.color = '#fff';
+            }
+        };
+        img.onerror = () => {
+            console.error("No se pudo cargar la imagen:", imageUrl);
+            // Si una imagen falla, carga la de por defecto para que el juego no se rompa
+            if (imageUrl !== imageMap['default']) {
+                setPuzzleImage(imageMap['default']);
+            }
+        };
+
+        initPuzzle();
+    }
+    
+    function getImageUrlFromUrl() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const imageId = urlParams.get('id');
+        return imageMap[imageId] || imageMap['default'];
+    }
 
     function createPieces() {
         for (let i = 1; i <= TILE_COUNT; i++) {
@@ -52,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tiles = [...fullState];
         Object.values(pieceElements).forEach(el => el.style.display = 'block');
         updatePositions();
-        clearConfetti(); // Limpia confeti anterior
+        clearConfetti();
     }
 
     function moveTile(clickedIndex) {
@@ -95,10 +149,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             pieceElements[TILE_COUNT].style.display = 'block';
             
-            // --- ACTIVAR ANIMACIONES DE VICTORIA Y CONFETI ---
-            updatePositions(); // Asegura que la última pieza se muestre en su lugar
-            container.classList.add('solved'); // Activa la animación de rebote y desvanecimiento de bordes
-            generateConfetti(); // Genera el confeti
+            container.classList.add('solved');
+            generateConfetti();
             
             shuffleButton.classList.remove('hidden');
             externalLinkButton.classList.remove('hidden');
@@ -112,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
         container.classList.remove('solved');
         shuffleButton.classList.add('hidden');
         externalLinkButton.classList.add('hidden');
-        clearConfetti(); // Limpia confeti si se vuelve a mezclar
+        clearConfetti();
         
         pieceElements[TILE_COUNT].style.display = 'none';
         tiles = [...solvedState];
@@ -138,28 +190,27 @@ document.addEventListener('DOMContentLoaded', () => {
         return movable;
     }
 
-    // --- FUNCIONES DE CONFETI ---
     function generateConfetti() {
         clearConfetti();
         const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4CAF50', '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#FF5722'];
         
-        for (let i = 0; i < CONFETTI_COUNT; i++) {
+        for (let i = 0; i < 50; i++) {
             const piece = document.createElement('div');
             piece.classList.add('confetti-piece');
             piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
             
-            const startX = Math.random() * CONTAINER_SIZE * 2 - CONTAINER_SIZE / 2; // Rango más amplio
-            const startY = -Math.random() * 50; // Desde arriba
-            const endX = Math.random() * CONTAINER_SIZE * 1.5 - CONTAINER_SIZE / 4; // Cae dentro del rango
-            const endY = CONTAINER_SIZE + Math.random() * 50; // Cae por debajo
+            const startX = Math.random() * CONTAINER_SIZE * 2 - CONTAINER_SIZE / 2;
+            const startY = -Math.random() * 50;
+            const endX = Math.random() * CONTAINER_SIZE * 1.5 - CONTAINER_SIZE / 4;
+            const endY = CONTAINER_SIZE + Math.random() * 50;
 
             piece.style.setProperty('--start-x', `${startX}px`);
             piece.style.setProperty('--start-y', `${startY}px`);
             piece.style.setProperty('--end-x', `${endX}px`);
             piece.style.setProperty('--end-y', `${endY}px`);
 
-            piece.style.animationDelay = `${Math.random() * 0.5}s`; // Pequeño retraso para dispersión
-            piece.style.animationDuration = `${2 + Math.random() * 1}s`; // Duración variable
+            piece.style.animationDelay = `${Math.random() * 0.5}s`;
+            piece.style.animationDuration = `${2 + Math.random() * 1}s`;
 
             confettiContainer.appendChild(piece);
         }
@@ -180,7 +231,9 @@ document.addEventListener('DOMContentLoaded', () => {
         moveTile(clickedIndex);
     });
 
-    createPieces();
-    initPuzzle();
     shuffleButton.addEventListener('click', shuffleAndStart);
+    
+    createPieces();
+    const initialImageUrl = getImageUrlFromUrl();
+    setPuzzleImage(initialImageUrl);
 });
