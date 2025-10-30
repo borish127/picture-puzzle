@@ -2,14 +2,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- MAPA DE IMÁGENES CORREGIDO ---
     // Ahora coincide con los nombres de tus archivos.
     const imageMap = {
-        'default': 'pictures/default.jpg',
-        'd1': 'pictures/d1.jpg',
-        'd2': 'pictures/d2.jpg',
-        'd3': 'pictures/d3.jpg',
-        'd4': 'pictures/d4.jpg',
-        'd5': 'pictures/d5.jpg',
-        'd6': 'pictures/d6.jpg',
-        'd7': 'pictures/d7.jpg'
+        'default': 'pictures/default.webp',
+        'd1': 'pictures/d1.webp',
+        'd2': 'pictures/d2.webp',
+        'd3': 'pictures/d3.webp',
+        'd4': 'pictures/d4.webp',
+        'd5': 'pictures/d5.webp',
+        'd6': 'pictures/d6.webp',
+        'd7': 'pictures/d7.webp'
     };
     // --- FIN DE LA CORRECCIÓN ---
 
