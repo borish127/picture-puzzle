@@ -40,19 +40,39 @@ h1 {
     position: relative;
     border-radius: 8px;
     box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-    overflow: hidden;
     transition: border-color 0.5s ease;
     background-color: #000;
 }
 
-#puzzle-container.solved {
-    border-color: transparent;
-    animation: winBounce 0.8s ease-out forwards;
+#preview-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: var(--puzzle-image);
+    background-size: 400px 400px;
+    opacity: 0;
+    z-index: 2;
+    transition: opacity 0.2s ease-in-out;
+    pointer-events: none;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    box-sizing: border-box;
 }
 
-@keyframes winBounce {
+#puzzle-container.show-preview #preview-image {
+    opacity: 1;
+}
+
+#puzzle-container.show-preview .tile {
+    z-index: 0;
+    pointer-events: none;
+}
+
+@keyframes winAnimationScale {
     0% { transform: scale(1); }
-    50% { transform: scale(1.03); }
+    50% { transform: scale(1.05); }
     100% { transform: scale(1); }
 }
 
@@ -65,13 +85,34 @@ h1 {
     cursor: pointer;
     border: 1px solid #fff;
     box-sizing: border-box;
-    transition: top 0.25s ease-out, left 0.25s ease-out, border 0.5s ease;
+    transition: top 0.25s ease-out, left 0.25s ease-out, border 0.5s ease, border-radius 0s, opacity 0.2s ease-in-out;
     -webkit-tap-highlight-color: transparent;
+    border-radius: 0;
+}
+
+.tile.top-left-corner {
+    border-top-left-radius: 8px;
+}
+.tile.top-right-corner {
+    border-top-right-radius: 8px;
+}
+.tile.bottom-left-corner {
+    border-bottom-left-radius: 8px;
+}
+.tile.bottom-right-corner {
+    border-bottom-right-radius: 8px;
 }
 
 #puzzle-container.solved .tile {
-    border: none;
-    cursor: default;
+    border-color: transparent;
+    transition: opacity 0.2s ease, border-color 0.2s ease;
+    pointer-events: none;
+}
+
+#puzzle-container.solved #preview-image {
+    opacity: 1;
+    animation: winAnimationScale 0.8s ease-out forwards;
+    transition: opacity 0.2s ease;
 }
 
 #message {
@@ -104,6 +145,9 @@ h1 {
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     transition: background-color 0.2s, color 0.2s, opacity 0.3s, visibility 0.3s;
     text-decoration: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
 }
 
 #shuffle-button {
@@ -136,7 +180,7 @@ h1 {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 1;
+    z-index: 3;
     overflow: hidden;
 }
 

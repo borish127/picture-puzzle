@@ -1,6 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- MAPA DE IMÁGENES CORREGIDO ---
-    // Ahora coincide con los nombres de tus archivos.
     const imageMap = {
         'default': 'pictures/default.webp',
         'd1': 'pictures/d1.webp',
@@ -11,7 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
         'd6': 'pictures/d6.webp',
         'd7': 'pictures/d7.webp'
     };
-    // --- FIN DE LA CORRECCIÓN ---
 
     const CONTAINER_SIZE = 400;
     const GRID_SIZE = 4;
@@ -57,7 +54,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         img.onerror = () => {
             console.error("No se pudo cargar la imagen:", imageUrl);
-            // Si una imagen falla, carga la de por defecto para que el juego no se rompa
             if (imageUrl !== imageMap['default']) {
                 setPuzzleImage(imageMap['default']);
             }
@@ -86,6 +82,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updatePositions() {
+
+        Object.values(pieceElements).forEach(el => {
+            el.classList.remove('top-left-corner', 'top-right-corner', 'bottom-left-corner', 'bottom-right-corner');
+        });
+
         tiles.forEach((pieceId, index) => {
             if (pieceId === 0) return;
             
@@ -94,17 +95,33 @@ document.addEventListener('DOMContentLoaded', () => {
             
             pieceElement.style.top = `${row * TILE_SIZE}px`;
             pieceElement.style.left = `${col * TILE_SIZE}px`;
+
+            if (index === 0) {
+                pieceElement.classList.add('top-left-corner');
+            } else if (index === GRID_SIZE - 1) {
+                pieceElement.classList.add('top-right-corner');
+            } else if (index === TILE_COUNT - GRID_SIZE) {
+                pieceElement.classList.add('bottom-left-corner');
+            } else if (index === TILE_COUNT - 1) {
+                pieceElement.classList.add('bottom-right-corner');
+            }
         });
     }
 
     function initPuzzle() {
         isGameActive = false;
         container.classList.remove('solved');
+        container.classList.remove('show-preview');
         shuffleButton.classList.remove('hidden');
+        shuffleButton.textContent = 'Mezclar y Jugar';
         externalLinkButton.classList.add('hidden');
         
         tiles = [...fullState];
-        Object.values(pieceElements).forEach(el => el.style.display = 'block');
+        Object.values(pieceElements).forEach(el => {
+            el.style.display = 'block';
+            el.style.transform = 'none';
+            el.style.zIndex = '0';
+        });
         updatePositions();
         clearConfetti();
     }
@@ -146,11 +163,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (JSON.stringify(tiles) === JSON.stringify(solvedState)) {
             message.textContent = '¡Ganaste! 🎉';
             isGameActive = false;
+            shuffleButton.textContent = 'Mezclar y Jugar';
             
             pieceElements[TILE_COUNT].style.display = 'block';
+            pieceElements[TILE_COUNT].classList.add('bottom-right-corner');
             
             container.classList.add('solved');
             generateConfetti();
+
+            Object.values(pieceElements).forEach(el => {
+                el.style.transform = 'scale(1.005) translateZ(0)';
+                el.style.zIndex = '1';
+            });
             
             shuffleButton.classList.remove('hidden');
             externalLinkButton.classList.remove('hidden');
@@ -161,9 +185,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function shuffleAndStart() {
         isGameActive = true;
+        shuffleButton.textContent = 'Preview';
         container.classList.remove('solved');
-        shuffleButton.classList.add('hidden');
-        externalLinkButton.classList.add('hidden');
+        container.classList.remove('show-preview');
+        
+        Object.values(pieceElements).forEach(el => {
+            el.style.transform = 'none';
+            el.style.zIndex = '0';
+        });
+        
         clearConfetti();
         
         pieceElements[TILE_COUNT].style.display = 'none';
@@ -231,8 +261,54 @@ document.addEventListener('DOMContentLoaded', () => {
         moveTile(clickedIndex);
     });
 
-    shuffleButton.addEventListener('click', shuffleAndStart);
+    shuffleButton.addEventListener('click', () => {
+        if (!isGameActive) {
+            shuffleAndStart();
+        }
+    });
     
+    shuffleButton.addEventListener('mousedown', () => {
+        if (isGameActive) { 
+            container.classList.add('show-preview');
+        }
+    });
+
+    shuffleButton.addEventListener('mouseup', () => {
+        if (isGameActive) {
+            container.classList.remove('show-preview');
+        }
+    });
+
+    shuffleButton.addEventListener('mouseleave', () => {
+        if (isGameActive) {
+            container.classList.remove('show-preview');
+        }
+    });
+
+
+    shuffleButton.addEventListener('touchstart', (event) => {
+        if (isGameActive) {
+            event.preventDefault(); 
+            container.classList.add('show-preview');
+        }
+
+    }, { passive: false });
+
+    shuffleButton.addEventListener('touchend', (event) => {
+        if (isGameActive) {
+            event.preventDefault(); 
+            container.classList.remove('show-preview');
+        }
+    });
+    
+    shuffleButton.addEventListener('touchcancel', (event) => {
+        if (isGameActive) {
+            event.preventDefault();
+            container.classList.remove('show-preview');
+        }
+    });
+
+
     createPieces();
     const initialImageUrl = getImageUrlFromUrl();
     setPuzzleImage(initialImageUrl);
