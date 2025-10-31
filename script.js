@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function checkForWin() {
         if (JSON.stringify(tiles) === JSON.stringify(solvedState)) {
-            message.textContent = '¡Ganaste! 🎉';
+            message.textContent = winMessageText;;
             isGameActive = false;
             shuffleButton.textContent = 'Mezclar y Jugar';
             
@@ -310,6 +310,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     createPieces();
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const imageId = urlParams.get('id');
+    
+    let winMessageText = '';
+    // ¡IMPORTANTE! Reemplaza estos links con los que tú necesites.
+    const linkParaSerieD = "https://borish127.github.io/invitacion-boda/?grupo=damas"; // <-- REEMPLAZA ESTE LINK (para d1-d7)
+    const linkParaDefault = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"; // <-- REEMPLAZA ESTE LINK (para default)
+    
+    const textoParaSerieD = "Texto Damas";
+    const textoParaDefault = "¡Juego Completado!";
+    // Comprobamos si el imageId existe en nuestro mapa y NO es 'default'
+    if (imageId && imageMap[imageId] && imageId !== 'default') {
+        // El ID es uno de: d1, d2, d3, d4, d5, d6, o d7
+        externalLinkButton.href = linkParaSerieD;
+        winMessageText = textoParaSerieD; // Asignamos el texto para d1-d7
+    } else {
+        // El ID es 'default' o un ID inválido, así que se usa el link por defecto
+        externalLinkButton.href = linkParaDefault;
+        winMessageText = textoParaDefault; // Asignamos el texto para default
+    }
+
     const initialImageUrl = getImageUrlFromUrl();
     setPuzzleImage(initialImageUrl);
 });
