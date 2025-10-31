@@ -57,7 +57,7 @@ h1 {
     transition: opacity 0.2s ease-in-out;
     pointer-events: none;
     border-radius: 8px;
-    border: 1px solid transparent;
+    border: 1px solid white;
     box-sizing: border-box;
 }
 
