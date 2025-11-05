@@ -250,6 +250,21 @@ document.addEventListener('DOMContentLoaded', () => {
         confettiContainer.innerHTML = '';
     }
 
+    function isTouchInside(event, element) {
+        if (!event.changedTouches || event.changedTouches.length === 0) {
+            return false;
+        }
+        const touch = event.changedTouches[0];
+        const rect = element.getBoundingClientRect();
+        
+        return (
+            touch.clientX >= rect.left &&
+            touch.clientX <= rect.right &&
+            touch.clientY >= rect.top &&
+            touch.clientY <= rect.bottom
+        );
+    }
+
     container.addEventListener('click', (event) => {
         if (!isGameActive) return;
         const rect = container.getBoundingClientRect();
@@ -295,9 +310,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     shuffleButton.addEventListener('touchend', (event) => {
         shuffleButton.classList.remove('button-active');
+        const touchWasInside = isTouchInside(event, shuffleButton);
         if (isGameActive) {
             container.classList.remove('show-preview');
-        } else {
+        } else if (touchWasInside){
             shuffleAndStart();
         }
     });
@@ -324,10 +340,13 @@ document.addEventListener('DOMContentLoaded', () => {
     externalLinkButton.addEventListener('touchend', (event) => {
         event.preventDefault();
         externalLinkButton.classList.remove('button-active');
-        const url = externalLinkButton.href;
-        setTimeout(() => {
-            window.location.href = url;
-        }, 100); 
+        const touchWasInside = isTouchInside(event, externalLinkButton);
+        if (touchWasInside) {
+            const url = externalLinkButton.href;
+            setTimeout(() => {
+                window.location.href = url;
+            }, 100);
+        } 
     });
 
     externalLinkButton.addEventListener('touchcancel', (event) => {
