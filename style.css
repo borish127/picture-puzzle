@@ -148,13 +148,15 @@ h1 {
     user-select: none;
     -webkit-user-select: none;
     -moz-user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 #shuffle-button {
     background-color: #007bff;
 }
 
-#shuffle-button:hover {
+#shuffle-button:hover,
+#shuffle-button.button-active {
     filter: brightness(0.9);
 }
 
@@ -162,7 +164,8 @@ h1 {
     background-color: #28a745;
 }
 
-#external-link-button:hover {
+#external-link-button:hover,
+#external-link-button.button-active {
     background-color: #218838;
 }
 

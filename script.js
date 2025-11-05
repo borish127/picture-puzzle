@@ -285,29 +285,55 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-
     shuffleButton.addEventListener('touchstart', (event) => {
+        event.preventDefault(); 
+        shuffleButton.classList.add('button-active');
         if (isGameActive) {
-            event.preventDefault(); 
             container.classList.add('show-preview');
         }
-
     }, { passive: false });
 
     shuffleButton.addEventListener('touchend', (event) => {
+        shuffleButton.classList.remove('button-active');
         if (isGameActive) {
-            event.preventDefault(); 
             container.classList.remove('show-preview');
+        } else {
+            shuffleAndStart();
         }
     });
     
     shuffleButton.addEventListener('touchcancel', (event) => {
+        shuffleButton.classList.remove('button-active');
         if (isGameActive) {
-            event.preventDefault();
             container.classList.remove('show-preview');
         }
     });
 
+    window.addEventListener('pageshow', () => {
+        shuffleButton.blur();
+        externalLinkButton.blur();
+        shuffleButton.classList.remove('button-active');
+        externalLinkButton.classList.remove('button-active');
+    });
+
+    externalLinkButton.addEventListener('touchstart', (event) => {
+        event.preventDefault(); 
+        externalLinkButton.classList.add('button-active');
+    }, { passive: false });
+
+    externalLinkButton.addEventListener('touchend', (event) => {
+        event.preventDefault();
+        externalLinkButton.classList.remove('button-active');
+        const url = externalLinkButton.href;
+        setTimeout(() => {
+            window.location.href = url;
+        }, 100); 
+    });
+
+    externalLinkButton.addEventListener('touchcancel', (event) => {
+        event.preventDefault();
+        externalLinkButton.classList.remove('button-active');
+    });
 
     createPieces();
     
@@ -315,21 +341,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const imageId = urlParams.get('id');
     
     let winMessageText = '';
-    // ¡IMPORTANTE! Reemplaza estos links con los que tú necesites.
-    const linkParaSerieD = "https://borish127.github.io/invitacion-boda/?grupo=damas"; // <-- REEMPLAZA ESTE LINK (para d1-d7)
-    const linkParaDefault = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"; // <-- REEMPLAZA ESTE LINK (para default)
+    const linkParaSerieD = "https://borish127.github.io/invitacion-boda/?grupo=damas";
+    const linkParaDefault = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
     
     const textoParaSerieD = "Texto Damas";
     const textoParaDefault = "¡Juego Completado!";
-    // Comprobamos si el imageId existe en nuestro mapa y NO es 'default'
     if (imageId && imageMap[imageId] && imageId !== 'default') {
-        // El ID es uno de: d1, d2, d3, d4, d5, d6, o d7
         externalLinkButton.href = linkParaSerieD;
-        winMessageText = textoParaSerieD; // Asignamos el texto para d1-d7
+        winMessageText = textoParaSerieD;
     } else {
-        // El ID es 'default' o un ID inválido, así que se usa el link por defecto
         externalLinkButton.href = linkParaDefault;
-        winMessageText = textoParaDefault; // Asignamos el texto para default
+        winMessageText = textoParaDefault;
     }
 
     const initialImageUrl = getImageUrlFromUrl();
