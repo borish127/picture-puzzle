@@ -7,7 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
         'd4': 'pictures/d4.webp',
         'd5': 'pictures/d5.webp',
         'd6': 'pictures/d6.webp',
-        'd7': 'pictures/d7.webp'
+        'd7': 'pictures/d7.webp',
+        'd8': 'pictures/d8.webp',
     };
 
     const CONTAINER_SIZE = 400;
