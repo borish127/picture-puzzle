@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <title>Sliding Picture Puzzle</title>
-    <meta property="og:title" content="Picture Puzzle">    
-    <meta property="og:description" content="Picture Puzzle Game - Solve the sliding puzzle to reveal the image">    
-    <meta property="og:url" content="https://borish127.github.io/picture-puzzle/" />    
+    <meta property="og:title" content="Picture Puzzle">
+    <meta property="og:description" content="Picture Puzzle Game - Solve the sliding puzzle to reveal the image">
+    <meta property="og:url" content="https://borish127.github.io/picture-puzzle/" />
     <meta property="og:image" content="https://borish127.github.io/picture-puzzle/pictures/icon.jpg">
     <meta property="og:image:width" content="512" />
     <meta property="og:image:height" content="512" />
@@ -14,27 +15,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/png" href="icon.png">
-    
+
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div id="background-blur"></div>
 
-    <h1>Sliding Picture Puzzle</h1>
-    
-    <div id="puzzle-container">
-        <div id="preview-image"></div>
-        <div class="confetti-container"></div>
-    </div>
-    <p id="message"></p>
-    <div id="button-container">
-        <button id="shuffle-button">Mezclar y Jugar</button>
-        <a href="https://borish127.github.io/picture-puzzle" target="_blank" id="external-link-button" class="hidden">
-            Visitar Link
-        </a>
+    <h1>Bienvenido a:<br> "arma la imagen como puedas"</h1>
+
+    <div class="game-container">
+        <div id="puzzle-container">
+            <div id="preview-image"></div>
+            <div class="confetti-container"></div>
+        </div>
+        <p id="message"></p>
+        <div id="button-container">
+            <button id="shuffle-button">Mezclar y Jugar</button>
+            <a href="https://borish127.github.io/picture-puzzle" target="_blank" id="external-link-button"
+                class="hidden">
+                Visitar Link
+            </a>
+        </div>
     </div>
 
-    <script src="libs/color-thief.umd.js"></script> 
+    <script src="libs/color-thief.umd.js"></script>
     <script src="script.js"></script>
 </body>
+
 </html>

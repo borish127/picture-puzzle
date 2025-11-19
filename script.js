@@ -9,6 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
         'd6': 'pictures/d6.webp',
         'd7': 'pictures/d7.webp',
         'd8': 'pictures/d8.webp',
+        'c1': 'pictures/c1.webp',
+        'c2': 'pictures/c2.webp',
+        'c3': 'pictures/c3.webp',
+        'c4': 'pictures/c4.webp',
+        'c5': 'pictures/c5.webp',
+        'c6': 'pictures/c6.webp',
     };
 
     const CONTAINER_SIZE = 400;
@@ -21,10 +27,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const shuffleButton = document.getElementById('shuffle-button');
     const externalLinkButton = document.getElementById('external-link-button');
     const confettiContainer = container.querySelector('.confetti-container');
-    
-    const pieceElements = {}; 
+    const gameContainer = document.querySelector('.game-container');
+
+    const pieceElements = {};
     let tiles = [];
     let isGameActive = false;
+    let hasWonOnce = false;
     const colorThief = new ColorThief();
 
     const solvedState = Array.from({ length: TILE_COUNT - 1 }, (_, i) => i + 1).concat(0);
@@ -42,9 +50,9 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const dominantColor = colorThief.getColor(img);
                 const colorRgb = `rgb(${dominantColor[0]}, ${dominantColor[1]}, ${dominantColor[2]})`;
-                
+
                 shuffleButton.style.backgroundColor = colorRgb;
-                
+
                 const luminance = (0.299 * dominantColor[0] + 0.587 * dominantColor[1] + 0.114 * dominantColor[2]) / 255;
                 shuffleButton.style.color = luminance > 0.5 ? '#000' : '#fff';
             } catch (e) {
@@ -62,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         initPuzzle();
     }
-    
+
     function getImageUrlFromUrl() {
         const urlParams = new URLSearchParams(window.location.search);
         const imageId = urlParams.get('id');
@@ -73,10 +81,10 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = 1; i <= TILE_COUNT; i++) {
             const piece = document.createElement('div');
             piece.classList.add('tile');
-            
+
             const { row, col } = getRowCol(i - 1);
             piece.style.backgroundPosition = `-${col * TILE_SIZE}px -${row * TILE_SIZE}px`;
-            
+
             pieceElements[i] = piece;
             container.appendChild(piece);
         }
@@ -90,10 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tiles.forEach((pieceId, index) => {
             if (pieceId === 0) return;
-            
+
             const pieceElement = pieceElements[pieceId];
             const { row, col } = getRowCol(index);
-            
+
             pieceElement.style.top = `${row * TILE_SIZE}px`;
             pieceElement.style.left = `${col * TILE_SIZE}px`;
 
@@ -116,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         shuffleButton.classList.remove('hidden');
         shuffleButton.textContent = 'Mezclar y Jugar';
         externalLinkButton.classList.add('hidden');
-        
+
         tiles = [...fullState];
         Object.values(pieceElements).forEach(el => {
             el.style.display = 'block';
@@ -133,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const emptyIndex = tiles.indexOf(0);
         const { row: clickedRow, col: clickedCol } = getRowCol(clickedIndex);
         const { row: emptyRow, col: emptyCol } = getRowCol(emptyIndex);
-        
+
         if (clickedRow === emptyRow) {
             const step = (clickedIndex < emptyIndex) ? 1 : -1;
             for (let i = emptyIndex; i !== clickedIndex; i -= step) {
@@ -162,25 +170,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function checkForWin() {
         if (JSON.stringify(tiles) === JSON.stringify(solvedState)) {
-            message.textContent = winMessageText;;
+            message.textContent = winMessageText;
             isGameActive = false;
+            hasWonOnce = true;
             shuffleButton.textContent = 'Mezclar y Jugar';
-            
+
             pieceElements[TILE_COUNT].style.display = 'block';
             pieceElements[TILE_COUNT].classList.add('bottom-right-corner');
-            
+
             container.classList.add('solved');
+            gameContainer.classList.add('layout-solved');
             generateConfetti();
 
             Object.values(pieceElements).forEach(el => {
                 el.style.transform = 'scale(1.005) translateZ(0)';
                 el.style.zIndex = '1';
             });
-            
+
             shuffleButton.classList.remove('hidden');
             externalLinkButton.classList.remove('hidden');
         } else {
-            message.textContent = '';
+            if (!hasWonOnce) {
+                message.textContent = '';
+            }
         }
     }
 
@@ -189,14 +201,14 @@ document.addEventListener('DOMContentLoaded', () => {
         shuffleButton.textContent = 'Preview';
         container.classList.remove('solved');
         container.classList.remove('show-preview');
-        
+
         Object.values(pieceElements).forEach(el => {
             el.style.transform = 'none';
             el.style.zIndex = '0';
         });
-        
+
         clearConfetti();
-        
+
         pieceElements[TILE_COUNT].style.display = 'none';
         tiles = [...solvedState];
 
@@ -206,9 +218,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const randomIndex = movableIndices[Math.floor(Math.random() * movableIndices.length)];
             [tiles[randomIndex], tiles[emptyIndex]] = [tiles[emptyIndex], tiles[randomIndex]];
         }
-        
+
         updatePositions();
-        message.textContent = '';
+        if (!hasWonOnce) {
+            message.textContent = '';
+        }
     }
 
     function getMovableTiles(emptyIndex) {
@@ -224,12 +238,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function generateConfetti() {
         clearConfetti();
         const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4CAF50', '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#FF5722'];
-        
+
         for (let i = 0; i < 50; i++) {
             const piece = document.createElement('div');
             piece.classList.add('confetti-piece');
             piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-            
+
             const startX = Math.random() * CONTAINER_SIZE * 2 - CONTAINER_SIZE / 2;
             const startY = -Math.random() * 50;
             const endX = Math.random() * CONTAINER_SIZE * 1.5 - CONTAINER_SIZE / 4;
@@ -257,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const touch = event.changedTouches[0];
         const rect = element.getBoundingClientRect();
-        
+
         return (
             touch.clientX >= rect.left &&
             touch.clientX <= rect.right &&
@@ -282,9 +296,9 @@ document.addEventListener('DOMContentLoaded', () => {
             shuffleAndStart();
         }
     });
-    
+
     shuffleButton.addEventListener('mousedown', () => {
-        if (isGameActive) { 
+        if (isGameActive) {
             container.classList.add('show-preview');
         }
     });
@@ -302,7 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     shuffleButton.addEventListener('touchstart', (event) => {
-        event.preventDefault(); 
+        event.preventDefault();
         shuffleButton.classList.add('button-active');
         if (isGameActive) {
             container.classList.add('show-preview');
@@ -314,11 +328,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const touchWasInside = isTouchInside(event, shuffleButton);
         if (isGameActive) {
             container.classList.remove('show-preview');
-        } else if (touchWasInside){
+        } else if (touchWasInside) {
             shuffleAndStart();
         }
     });
-    
+
     shuffleButton.addEventListener('touchcancel', (event) => {
         shuffleButton.classList.remove('button-active');
         if (isGameActive) {
@@ -334,7 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     externalLinkButton.addEventListener('touchstart', (event) => {
-        event.preventDefault(); 
+        event.preventDefault();
         externalLinkButton.classList.add('button-active');
     }, { passive: false });
 
@@ -347,7 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 window.location.href = url;
             }, 100);
-        } 
+        }
     });
 
     externalLinkButton.addEventListener('touchcancel', (event) => {
@@ -356,17 +370,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     createPieces();
-    
+
     const urlParams = new URLSearchParams(window.location.search);
     const imageId = urlParams.get('id');
-    
+
     let winMessageText = '';
     const linkParaSerieD = "https://borish127.github.io/invitacion-boda/?grupo=damas";
+    const linkParaSerieC = "https://borish127.github.io/invitacion-boda/?grupo=caballeros";
     const linkParaDefault = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-    
+
     const textoParaSerieD = "Texto Damas";
+    const textoParaSerieC = "Felicitaciones!! Si llegaste hasta aquí es porque has sido invitado a ser Caballero de Honor de Boris.\n Visita el link para ver la invitación completa";
     const textoParaDefault = "¡Juego Completado!";
-    if (imageId && imageMap[imageId] && imageId !== 'default') {
+
+    if (imageId && imageId.startsWith('c')) {
+        externalLinkButton.href = linkParaSerieC;
+        winMessageText = textoParaSerieC;
+    } else if (imageId && imageMap[imageId] && imageId !== 'default') {
         externalLinkButton.href = linkParaSerieD;
         winMessageText = textoParaSerieD;
     } else {
