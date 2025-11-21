@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const message = document.getElementById('message');
     const shuffleButton = document.getElementById('shuffle-button');
     const externalLinkButton = document.getElementById('external-link-button');
+    const countdownElement = document.getElementById('countdown-timer');
     const confettiContainer = container.querySelector('.confetti-container');
     const gameContainer = document.querySelector('.game-container');
 
@@ -33,6 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let tiles = [];
     let isGameActive = false;
     let hasWonOnce = false;
+    let countdownTimeout;
+    let countdownInterval;
     const colorThief = new ColorThief();
 
     const solvedState = Array.from({ length: TILE_COUNT - 1 }, (_, i) => i + 1).concat(0);
@@ -124,6 +127,9 @@ document.addEventListener('DOMContentLoaded', () => {
         shuffleButton.classList.remove('hidden');
         shuffleButton.textContent = 'Mezclar y Jugar';
         externalLinkButton.classList.add('hidden');
+        countdownElement.classList.add('hidden');
+        clearTimeout(countdownTimeout);
+        clearInterval(countdownInterval);
 
         tiles = [...fullState];
         Object.values(pieceElements).forEach(el => {
@@ -175,11 +181,24 @@ document.addEventListener('DOMContentLoaded', () => {
             hasWonOnce = true;
             shuffleButton.textContent = 'Mezclar y Jugar';
 
+            clearTimeout(countdownTimeout);
+            clearInterval(countdownInterval);
+            countdownElement.classList.add('hidden');
+
             pieceElements[TILE_COUNT].style.display = 'block';
             pieceElements[TILE_COUNT].classList.add('bottom-right-corner');
 
             container.classList.add('solved');
-            gameContainer.classList.add('layout-solved');
+
+            // Check if it is NOT Series D to apply layout change
+            const urlParams = new URLSearchParams(window.location.search);
+            const imageId = urlParams.get('id');
+            const isSeriesD = imageId && imageMap[imageId] && imageId !== 'default' && !imageId.startsWith('c');
+
+            if (!isSeriesD) {
+                gameContainer.classList.add('layout-solved');
+            }
+
             generateConfetti();
 
             Object.values(pieceElements).forEach(el => {
@@ -201,6 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
         shuffleButton.textContent = 'Preview';
         container.classList.remove('solved');
         container.classList.remove('show-preview');
+        gameContainer.classList.remove('layout-solved');
 
         Object.values(pieceElements).forEach(el => {
             el.style.transform = 'none';
@@ -208,6 +228,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         clearConfetti();
+        clearTimeout(countdownTimeout);
+        clearInterval(countdownInterval);
+        countdownElement.classList.add('hidden');
+
+        // Start countdown logic only if the user hasn't won yet AND it is Series D
+        const urlParams = new URLSearchParams(window.location.search);
+        const imageId = urlParams.get('id');
+        const isSeriesD = imageId && imageMap[imageId] && imageId !== 'default' && !imageId.startsWith('c');
+
+        if (!hasWonOnce && isSeriesD) {
+            countdownTimeout = setTimeout(() => {
+                startCountdown();
+            }, 60000); // 1 minute delay
+        }
 
         pieceElements[TILE_COUNT].style.display = 'none';
         tiles = [...solvedState];
@@ -223,6 +257,30 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!hasWonOnce) {
             message.textContent = '';
         }
+    }
+
+    function startCountdown() {
+        let timeLeft = 60; // 1 minute in seconds
+        countdownElement.classList.remove('hidden');
+        updateCountdownText(timeLeft);
+
+        countdownInterval = setInterval(() => {
+            timeLeft--;
+            updateCountdownText(timeLeft);
+
+            if (timeLeft <= 0) {
+                clearInterval(countdownInterval);
+                countdownElement.classList.add('hidden');
+                externalLinkButton.classList.remove('hidden');
+            }
+        }, 1000);
+    }
+
+    function updateCountdownText(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        const timeString = `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        countdownElement.textContent = `Link disponible en: ${timeString}`;
     }
 
     function getMovableTiles(emptyIndex) {
@@ -379,8 +437,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const linkParaSerieC = "https://borish127.github.io/invitacion-boda/?grupo=caballeros";
     const linkParaDefault = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
-    const textoParaSerieD = "Texto Damas";
-    const textoParaSerieC = "Felicitaciones!! Si llegaste hasta aquí es porque has sido invitado a ser Caballero de Honor de Boris.\n Visita el link para ver la invitación completa";
+    const textoParaSerieD = "";
+    const textoParaSerieC = "Felicitaciones!! Si llegaste hasta aquí es porque has sido invitado a ser Caballero de Honor de Boris.\n Visita el link para ver la invitación completa.";
     const textoParaDefault = "¡Juego Completado!";
 
     if (imageId && imageId.startsWith('c')) {
