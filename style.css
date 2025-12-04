@@ -25,8 +25,12 @@ body {
     align-items: center;
     justify-content: center;
     height: 100vh;
+    /* Fallback for browsers that don't support dvh */
+    height: 100dvh;
     margin: 0;
     overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
+    box-sizing: border-box;
 }
 
 h1 {
