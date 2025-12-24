@@ -50,6 +50,21 @@ h1 {
     background-color: #000;
 }
 
+#puzzle-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    pointer-events: none;
+    z-index: 10;
+    transition: border-color 0.5s ease;
+    box-sizing: border-box;
+}
+
 #preview-image {
     position: absolute;
     top: 0;
@@ -63,7 +78,7 @@ h1 {
     transition: opacity 0.2s ease-in-out;
     pointer-events: none;
     border-radius: 8px;
-    border: 1px solid white;
+    /* border: 1px solid white; Removed to prevent zoom artifacts */
     box-sizing: border-box;
 }
 
@@ -126,6 +141,15 @@ h1 {
     pointer-events: none;
 }
 
+#puzzle-container.solved {
+    overflow: hidden;
+}
+
+#puzzle-container.solved::after {
+    border-color: #fff;
+
+}
+
 #puzzle-container.solved #preview-image {
     opacity: 1;
     animation: winAnimationScale 0.8s ease-out forwards;
@@ -140,6 +164,37 @@ h1 {
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
     white-space: pre-line;
     line-height: 1.4;
+}
+
+.message-highlight {
+    font-size: 1.3em !important;
+    font-weight: bold;
+    background-color: rgba(0, 0, 0, 0.85);
+    border: 2px solid #ffeb3b;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 0 15px rgba(255, 235, 59, 0.6);
+    animation: highlightPulse 2s infinite;
+    max-width: 90%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+@keyframes highlightPulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 15px rgba(255, 235, 59, 0.6);
+    }
+
+    50% {
+        transform: scale(1.02);
+        box-shadow: 0 0 25px rgba(255, 235, 59, 0.9);
+    }
+
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 15px rgba(255, 235, 59, 0.6);
+    }
 }
 
 #countdown-timer {
@@ -249,6 +304,13 @@ h1 {
     align-items: center;
     width: 100%;
     max-width: 900px;
+}
+
+@media (max-width: 767px) {
+    .game-container.layout-solved #puzzle-container {
+        /* No manual margin. Let Flexbox/Grid handle the layout shift when buttons appear. */
+        margin-bottom: 20px;
+    }
 }
 
 @media (min-width: 768px) {

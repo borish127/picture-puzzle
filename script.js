@@ -38,8 +38,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let countdownInterval;
     const colorThief = new ColorThief();
 
+    function isMobileDevice() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || navigator.maxTouchPoints > 0;
+    }
+
     const solvedState = Array.from({ length: TILE_COUNT - 1 }, (_, i) => i + 1).concat(0);
     const fullState = Array.from({ length: TILE_COUNT }, (_, i) => i + 1);
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const SWIPE_THRESHOLD = 30;
 
     function setPuzzleImage(imageUrl) {
         const urlWithPath = `url('${imageUrl}')`;
@@ -124,6 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isGameActive = false;
         container.classList.remove('solved');
         container.classList.remove('show-preview');
+        message.classList.remove('message-highlight');
         shuffleButton.classList.remove('hidden');
         shuffleButton.textContent = 'Mezclar y Jugar';
         externalLinkButton.classList.add('hidden');
@@ -176,7 +185,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function checkForWin() {
         if (JSON.stringify(tiles) === JSON.stringify(solvedState)) {
-            message.textContent = winMessageText;
             isGameActive = false;
             hasWonOnce = true;
             shuffleButton.textContent = 'Mezclar y Jugar';
@@ -185,19 +193,114 @@ document.addEventListener('DOMContentLoaded', () => {
             clearInterval(countdownInterval);
             countdownElement.classList.add('hidden');
 
+            // --- ANIMATION START (Simplified FLIP) ---
+            // 1. Capture Start Position of the PUZZLE (not wrapper)
+            const firstRect = container.getBoundingClientRect();
+
+            // 2. State Change: Apply class AND unhide buttons
+            container.classList.add('solved');
+
             pieceElements[TILE_COUNT].style.display = 'block';
             pieceElements[TILE_COUNT].classList.add('bottom-right-corner');
 
-            container.classList.add('solved');
+            // Hide countdown
+            countdownElement.classList.add('hidden');
+
+            // Unhide buttons immediately (Opacity 0) to trigger full layout expansion
+            shuffleButton.classList.remove('hidden');
+            shuffleButton.style.opacity = '0';
 
             // Check if it is NOT Series D to apply layout change
             const urlParams = new URLSearchParams(window.location.search);
             const imageId = urlParams.get('id');
             const isSeriesD = imageId && imageMap[imageId] && imageId !== 'default' && !imageId.startsWith('c');
+            const isSeriesC = imageId && imageId.startsWith('c');
 
             if (!isSeriesD) {
                 gameContainer.classList.add('layout-solved');
             }
+
+            if (isSeriesC || !isSeriesD) {
+                externalLinkButton.classList.remove('hidden');
+                externalLinkButton.style.opacity = '0';
+            }
+
+            // 3. Capture End Position of the PUZZLE
+            const lastRect = container.getBoundingClientRect();
+            const deltaX = firstRect.left - lastRect.left;
+            const deltaY = firstRect.top - lastRect.top;
+
+            // 4. Invert & Play (WAAPI) on PUZZLE CONTAINER
+            if (deltaX !== 0 || deltaY !== 0) {
+                const animation = container.animate([
+                    { transform: `translate(${deltaX}px, ${deltaY}px)` },
+                    { transform: 'none' }
+                ], {
+                    duration: 800,
+                    easing: 'ease-in-out',
+                    fill: 'none'
+                });
+
+                // Fade in buttons shortly after animation starts or finishes
+                animation.onfinish = () => {
+                    shuffleButton.style.transition = 'opacity 0.5s';
+                    shuffleButton.style.opacity = '1';
+
+                    if (isSeriesC) {
+                        setTimeout(() => {
+                            externalLinkButton.style.transition = 'opacity 0.5s';
+                            externalLinkButton.style.opacity = '1';
+                        }, 4000);
+                    } else {
+                        externalLinkButton.style.transition = 'opacity 0.5s';
+                        externalLinkButton.style.opacity = '1';
+                    }
+                };
+            } else {
+                // Even if no movement, fade in buttons
+                shuffleButton.style.transition = 'opacity 0.5s';
+                shuffleButton.style.opacity = '1';
+
+                if (isSeriesC) {
+                    setTimeout(() => {
+                        externalLinkButton.style.transition = 'opacity 0.5s';
+                        externalLinkButton.style.opacity = '1';
+                    }, 4000);
+                } else {
+                    externalLinkButton.style.transition = 'opacity 0.5s';
+                    externalLinkButton.style.opacity = '1';
+                }
+            }
+            // --- ANIMATION END ---
+
+            // Message handling: Hide initially, show after animation
+            message.style.opacity = '0';
+            message.style.visibility = 'hidden';
+            message.style.transition = 'opacity 0.5s ease-in-out';
+            message.textContent = winMessageText; // Set text but keep hidden
+
+            if (isSeriesC) {
+                message.classList.add('message-highlight');
+            }
+
+            // Delay message appearance until after puzzle move (approx 800ms)
+            setTimeout(() => {
+                message.style.visibility = 'visible';
+                message.style.opacity = '1';
+
+                // Show link button logic (chained after message)
+                if (isSeriesC) {
+                    setTimeout(() => {
+                        externalLinkButton.classList.remove('hidden');
+                    }, 4000); // 4s AFTER message appears
+                } else {
+                    // For others, show immediately with message or slightly after
+                    externalLinkButton.classList.remove('hidden');
+                }
+
+                shuffleButton.classList.remove('hidden');
+
+            }, 800); // Matches animation duration
 
             generateConfetti();
 
@@ -205,9 +308,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 el.style.transform = 'scale(1.005) translateZ(0)';
                 el.style.zIndex = '1';
             });
-
-            shuffleButton.classList.remove('hidden');
-            externalLinkButton.classList.remove('hidden');
         } else {
             if (!hasWonOnce) {
                 message.textContent = '';
@@ -220,6 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
         shuffleButton.textContent = 'Preview';
         container.classList.remove('solved');
         container.classList.remove('show-preview');
+        message.classList.remove('message-highlight');
         gameContainer.classList.remove('layout-solved');
 
         Object.values(pieceElements).forEach(el => {
@@ -337,6 +438,74 @@ document.addEventListener('DOMContentLoaded', () => {
             touch.clientY <= rect.bottom
         );
     }
+
+    container.addEventListener('touchstart', (event) => {
+        if (!isMobileDevice()) return;
+        if (!isGameActive) return;
+        if (event.changedTouches.length > 0) {
+            touchStartX = event.changedTouches[0].clientX;
+            touchStartY = event.changedTouches[0].clientY;
+        }
+    }, { passive: false });
+
+    container.addEventListener('touchend', (event) => {
+        if (!isMobileDevice()) return;
+        if (!isGameActive || event.changedTouches.length === 0) return;
+
+        const touchEndX = event.changedTouches[0].clientX;
+        const touchEndY = event.changedTouches[0].clientY;
+
+        const deltaX = touchEndX - touchStartX;
+        const deltaY = touchEndY - touchStartY;
+
+        if (Math.abs(deltaX) < SWIPE_THRESHOLD && Math.abs(deltaY) < SWIPE_THRESHOLD) {
+            return;
+        }
+
+        const absX = Math.abs(deltaX);
+        const absY = Math.abs(deltaY);
+
+        const rect = container.getBoundingClientRect();
+        const startRelX = touchStartX - rect.left;
+        const startRelY = touchStartY - rect.top;
+
+        // Ensure start touch was inside container
+        if (startRelX < 0 || startRelX > rect.width || startRelY < 0 || startRelY > rect.height) return;
+
+        const col = Math.floor(startRelX / TILE_SIZE);
+        const row = Math.floor(startRelY / TILE_SIZE);
+        const index = row * GRID_SIZE + col;
+
+        if (index < 0 || index >= TILE_COUNT) return;
+
+        const emptyIndex = tiles.indexOf(0);
+        const { row: emptyRow, col: emptyCol } = getRowCol(emptyIndex);
+        const { row: tileRow, col: tileCol } = getRowCol(index);
+
+        const dRow = emptyRow - tileRow;
+        const dCol = emptyCol - tileCol;
+
+        // Check if move is valid (adjacent)
+        const isAdjacent = (Math.abs(dRow) + Math.abs(dCol)) === 1;
+        if (!isAdjacent) return;
+
+        // Check if swipe direction matches move direction
+        let matches = false;
+        if (absX > absY) {
+            // Horizontal swipe
+            if (deltaX > 0 && dCol > 0) matches = true; // Swipe Right, Empty is Right
+            if (deltaX < 0 && dCol < 0) matches = true; // Swipe Left, Empty is Left
+        } else {
+            // Vertical swipe
+            if (deltaY > 0 && dRow > 0) matches = true; // Swipe Down, Empty is Down
+            if (deltaY < 0 && dRow < 0) matches = true; // Swipe Up, Empty is Up
+        }
+
+        if (matches) {
+            event.preventDefault(); // Prevent click
+            moveTile(index);
+        }
+    });
 
     container.addEventListener('click', (event) => {
         if (!isGameActive) return;
