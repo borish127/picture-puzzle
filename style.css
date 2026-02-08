@@ -29,23 +29,38 @@ body {
     height: 100dvh;
     margin: 0;
     overflow: hidden;
+    /* Strict no-scroll */
     padding-bottom: env(safe-area-inset-bottom);
     box-sizing: border-box;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-size: min(3.5vmin, 18px);
+    /* Scalable, capped at 18px */
 }
 
 h1 {
     color: #fff;
-    font-size: 1.5em;
-    text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.9);
+    font-size: min(5.5vmin, 32px);
+    /* Scalable, capped at 32px */
+    text-shadow: 0.5vmin 0.5vmin 1vmin rgba(0, 0, 0, 0.9);
+    margin: min(2vmin, 15px) 0;
+    position: relative;
+    top: min(4vmin, 120px);
+    /* Visual offset downwards */
 }
 
 #puzzle-container {
-    width: 400px;
-    height: 400px;
-    margin: 20px auto;
+    width: min(85vmin, 450px);
+    /* Relative to viewport min dimension, capped */
+    max-width: min(85vmin, 450px);
+    max-height: min(85vmin, 450px);
+    /* Height is determined by aspect-ratio 1/1 */
+    height: auto;
+    aspect-ratio: 1 / 1;
+    margin: min(1vmin, 10px) auto;
     position: relative;
-    border-radius: 8px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    border-radius: min(2vmin, 12px);
+    box-shadow: 0 1vmin 2.5vmin rgba(0, 0, 0, 0.2);
     transition: border-color 0.5s ease;
     background-color: #000;
 }
@@ -72,7 +87,7 @@ h1 {
     width: 100%;
     height: 100%;
     background-image: var(--puzzle-image);
-    background-size: 400px 400px;
+    background-size: 100% 100%;
     opacity: 0;
     z-index: 2;
     transition: opacity 0.2s ease-in-out;
@@ -106,11 +121,12 @@ h1 {
 }
 
 .tile {
-    width: 100px;
-    height: 100px;
+    width: 25%;
+    height: 25%;
     position: absolute;
     background-image: var(--puzzle-image);
-    background-size: 400px 400px;
+    background-size: 400% 400%;
+    /* Image is 4x the tile size */
     cursor: pointer;
     border: 1px solid #fff;
     box-sizing: border-box;
@@ -157,11 +173,11 @@ h1 {
 }
 
 #message {
-    margin-top: 15px;
-    font-size: 1em;
+    margin-top: min(2vmin, 15px);
+    font-size: min(4vmin, 18px);
     color: #fff;
-    min-height: 30px;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+    min-height: min(6vmin, 30px);
+    text-shadow: 0.2vmin 0.2vmin 0.5vmin rgba(0, 0, 0, 0.7);
     white-space: pre-line;
     line-height: 1.4;
 }
@@ -198,35 +214,37 @@ h1 {
 }
 
 #countdown-timer {
-    margin-top: 10px;
-    font-size: 1.2em;
+    margin-top: min(1.5vmin, 10px);
+    font-size: min(4.5vmin, 20px);
     color: #ffeb3b;
     font-weight: bold;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-    min-height: 24px;
+    text-shadow: 0.2vmin 0.2vmin 0.5vmin rgba(0, 0, 0, 0.8);
+    min-height: min(5.5vmin, 25px);
 }
 
 #button-container {
     display: flex;
-    gap: 15px;
-    min-height: 50px;
+    flex-wrap: wrap;
+    gap: min(3vmin, 15px);
+    min-height: min(10vmin, 50px);
     align-items: center;
     justify-content: center;
     position: relative;
     width: 100%;
+    margin-top: min(2vmin, 15px);
 }
 
 .button,
 #shuffle-button,
 #external-link-button {
-    padding: 12px 24px;
-    font-size: 1em;
+    padding: min(2.5vmin, 12px) min(5vmin, 24px);
+    font-size: min(4vmin, 16px);
     font-weight: bold;
     cursor: pointer;
-    border-radius: 24px;
+    border-radius: min(5vmin, 24px);
     border: none;
     color: white;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0.5vmin 1.25vmin rgba(0, 0, 0, 0.2);
     transition: background-color 0.2s, color 0.2s, opacity 0.3s, visibility 0.3s;
     text-decoration: none;
     user-select: none;
@@ -273,8 +291,8 @@ h1 {
 
 .confetti-piece {
     position: absolute;
-    width: 10px;
-    height: 10px;
+    width: min(1.5vmin, 8px);
+    height: min(1.5vmin, 8px);
     background-color: transparent;
     border-radius: 50%;
     opacity: 0;
@@ -302,26 +320,32 @@ h1 {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: space-evenly;
+    /* Distribute space evenly */
     width: 100%;
-    max-width: 900px;
+    height: 100%;
+    /* Fill viewport */
+    max-width: none;
+    padding: min(2vmin, 20px);
+    box-sizing: border-box;
 }
 
 @media (max-width: 767px) {
     .game-container.layout-solved #puzzle-container {
-        /* No manual margin. Let Flexbox/Grid handle the layout shift when buttons appear. */
-        margin-bottom: 20px;
+        max-width: 80vmin;
+        margin-bottom: 0;
     }
 }
 
 @media (min-width: 768px) {
     .game-container.layout-solved {
         display: grid;
-        grid-template-columns: auto minmax(200px, 300px);
+        grid-template-columns: auto minmax(min(30vmin, 300px), min(40vmin, 400px));
         grid-template-rows: auto auto;
         grid-template-areas:
             "puzzle message"
             "buttons message";
-        gap: 20px;
+        gap: min(3vmin, 20px);
         align-items: center;
         justify-content: center;
     }
@@ -334,12 +358,68 @@ h1 {
     #button-container {
         grid-area: buttons;
         justify-content: center;
+        margin-top: 0;
     }
 
     #message {
         grid-area: message;
         margin-top: 0;
         text-align: left;
-        align-self: center;
     }
+}
+
+/* Keyframes for smooth fade appearance */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+#message.visible {
+    animation: fadeIn 0.8s ease-in-out forwards;
+}
+
+#external-link-button.visible {
+    animation: fadeIn 0.8s ease-in-out forwards;
+}
+
+#preview-hint {
+    position: absolute;
+    bottom: min(12vmin, 60px);
+    /* Above the button */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    padding: min(2vmin, 10px) min(3vmin, 15px);
+    border-radius: min(1.5vmin, 8px);
+    font-size: min(3.5vmin, 14px);
+    pointer-events: none;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    z-index: 100;
+    box-shadow: 0 0.5vmin 2vmin rgba(0, 0, 0, 0.3);
+}
+
+#preview-hint::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -6px;
+    border-width: 6px;
+    border-style: solid;
+    border-color: rgba(0, 0, 0, 0.9) transparent transparent transparent;
+}
+
+#preview-hint.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(-5px);
 }

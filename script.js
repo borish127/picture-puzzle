@@ -17,10 +17,10 @@ document.addEventListener('DOMContentLoaded', () => {
         'c6': 'pictures/c6.webp',
     };
 
-    const CONTAINER_SIZE = 400;
+    // const CONTAINER_SIZE = 400; // Removed fixed size
     const GRID_SIZE = 4;
     const TILE_COUNT = GRID_SIZE * GRID_SIZE;
-    const TILE_SIZE = CONTAINER_SIZE / GRID_SIZE;
+    // const TILE_SIZE = CONTAINER_SIZE / GRID_SIZE; // Removed fixed size
 
     const container = document.getElementById('puzzle-container');
     const message = document.getElementById('message');
@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const countdownElement = document.getElementById('countdown-timer');
     const confettiContainer = container.querySelector('.confetti-container');
     const gameContainer = document.querySelector('.game-container');
+    const hintElement = document.getElementById('preview-hint');
 
     const pieceElements = {};
     let tiles = [];
@@ -36,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let hasWonOnce = false;
     let countdownTimeout;
     let countdownInterval;
+    let previewPressStartTime = 0;
+    let hintTimeout;
     const colorThief = new ColorThief();
 
     function isMobileDevice() {
@@ -94,7 +97,10 @@ document.addEventListener('DOMContentLoaded', () => {
             piece.classList.add('tile');
 
             const { row, col } = getRowCol(i - 1);
-            piece.style.backgroundPosition = `-${col * TILE_SIZE}px -${row * TILE_SIZE}px`;
+            // Use percentages for background position
+            const xPercent = col * 100 / (GRID_SIZE - 1);
+            const yPercent = row * 100 / (GRID_SIZE - 1);
+            piece.style.backgroundPosition = `${xPercent}% ${yPercent}%`;
 
             pieceElements[i] = piece;
             container.appendChild(piece);
@@ -113,8 +119,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const pieceElement = pieceElements[pieceId];
             const { row, col } = getRowCol(index);
 
-            pieceElement.style.top = `${row * TILE_SIZE}px`;
-            pieceElement.style.left = `${col * TILE_SIZE}px`;
+            // Use percentages for positioning
+            pieceElement.style.top = `${row * 100 / GRID_SIZE}%`;
+            pieceElement.style.left = `${col * 100 / GRID_SIZE}%`;
 
             if (index === 0) {
                 pieceElement.classList.add('top-left-corner');
@@ -134,6 +141,8 @@ document.addEventListener('DOMContentLoaded', () => {
         container.classList.remove('show-preview');
         message.classList.remove('message-highlight');
         shuffleButton.classList.remove('hidden');
+        hintElement.classList.remove('visible');
+        clearTimeout(hintTimeout);
         shuffleButton.textContent = 'Mezclar y Jugar';
         externalLinkButton.classList.add('hidden');
         countdownElement.classList.add('hidden');
@@ -221,8 +230,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (isSeriesC || !isSeriesD) {
-                externalLinkButton.classList.remove('hidden');
-                externalLinkButton.style.opacity = '0';
+                // Keep external link hidden initially, will animate in
+                externalLinkButton.classList.add('hidden');
+                externalLinkButton.classList.remove('visible'); // Reset animation
             }
 
             // 3. Capture End Position of the PUZZLE
@@ -230,46 +240,39 @@ document.addEventListener('DOMContentLoaded', () => {
             const deltaX = firstRect.left - lastRect.left;
             const deltaY = firstRect.top - lastRect.top;
 
-            // 4. Invert & Play (WAAPI) on PUZZLE CONTAINER
-            if (deltaX !== 0 || deltaY !== 0) {
+            // 4. Invert & Play
+            const triggerWinState = () => {
+                // Message
+                message.textContent = winMessageText;
+                if (isSeriesC) message.classList.add('message-highlight');
+
+                // Show message (animates via CSS .visible)
+                message.style.visibility = 'visible';
+                setTimeout(() => message.classList.add('visible'), 100);
+
+                // Show external link (animates via CSS .visible)
+                const linkDelay = isSeriesC ? 4000 : 600;
+                setTimeout(() => {
+                    externalLinkButton.classList.remove('hidden');
+                    externalLinkButton.classList.add('visible');
+                }, linkDelay);
+
+                // Show shuffle button
+                shuffleButton.classList.remove('hidden');
+                // Ensure it's visible if we messed with opacity before
+                shuffleButton.style.opacity = '1';
+            };
+
+            // Only run WAAPI animation on Desktop (non-mobile)
+            if (!isMobileDevice() && (deltaX !== 0 || deltaY !== 0)) {
                 const animation = container.animate([
                     { transform: `translate(${deltaX}px, ${deltaY}px)` },
                     { transform: 'none' }
-                ], {
-                    duration: 800,
-                    easing: 'ease-in-out',
-                    fill: 'none'
-                });
-
-                // Fade in buttons shortly after animation starts or finishes
-                animation.onfinish = () => {
-                    shuffleButton.style.transition = 'opacity 0.5s';
-                    shuffleButton.style.opacity = '1';
-
-                    if (isSeriesC) {
-                        setTimeout(() => {
-                            externalLinkButton.style.transition = 'opacity 0.5s';
-                            externalLinkButton.style.opacity = '1';
-                        }, 4000);
-                    } else {
-                        externalLinkButton.style.transition = 'opacity 0.5s';
-                        externalLinkButton.style.opacity = '1';
-                    }
-                };
+                ], { duration: 800, easing: 'ease-in-out' });
+                animation.onfinish = triggerWinState;
             } else {
-                // Even if no movement, fade in buttons
-                shuffleButton.style.transition = 'opacity 0.5s';
-                shuffleButton.style.opacity = '1';
-
-                if (isSeriesC) {
-                    setTimeout(() => {
-                        externalLinkButton.style.transition = 'opacity 0.5s';
-                        externalLinkButton.style.opacity = '1';
-                    }, 4000);
-                } else {
-                    externalLinkButton.style.transition = 'opacity 0.5s';
-                    externalLinkButton.style.opacity = '1';
-                }
+                // Mobile or no movement
+                triggerWinState();
             }
             // --- ANIMATION END ---
 
@@ -320,6 +323,8 @@ document.addEventListener('DOMContentLoaded', () => {
         shuffleButton.textContent = 'Preview';
         container.classList.remove('solved');
         container.classList.remove('show-preview');
+        hintElement.classList.remove('visible');
+        clearTimeout(hintTimeout);
         message.classList.remove('message-highlight');
         gameContainer.classList.remove('layout-solved');
 
@@ -398,15 +403,18 @@ document.addEventListener('DOMContentLoaded', () => {
         clearConfetti();
         const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4CAF50', '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#FF5722'];
 
+        const containerWidth = container.offsetWidth;
+        const containerHeight = container.offsetHeight;
+
         for (let i = 0; i < 50; i++) {
             const piece = document.createElement('div');
             piece.classList.add('confetti-piece');
             piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
 
-            const startX = Math.random() * CONTAINER_SIZE * 2 - CONTAINER_SIZE / 2;
+            const startX = Math.random() * containerWidth * 2 - containerWidth / 2;
             const startY = -Math.random() * 50;
-            const endX = Math.random() * CONTAINER_SIZE * 1.5 - CONTAINER_SIZE / 4;
-            const endY = CONTAINER_SIZE + Math.random() * 50;
+            const endX = Math.random() * containerWidth * 1.5 - containerWidth / 4;
+            const endY = containerHeight + Math.random() * 50;
 
             piece.style.setProperty('--start-x', `${startX}px`);
             piece.style.setProperty('--start-y', `${startY}px`);
@@ -472,8 +480,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Ensure start touch was inside container
         if (startRelX < 0 || startRelX > rect.width || startRelY < 0 || startRelY > rect.height) return;
 
-        const col = Math.floor(startRelX / TILE_SIZE);
-        const row = Math.floor(startRelY / TILE_SIZE);
+        const dynamicTileSize = rect.width / GRID_SIZE;
+
+        const col = Math.floor(startRelX / dynamicTileSize);
+        const row = Math.floor(startRelY / dynamicTileSize);
         const index = row * GRID_SIZE + col;
 
         if (index < 0 || index >= TILE_COUNT) return;
@@ -512,8 +522,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const rect = container.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
-        const col = Math.floor(x / TILE_SIZE);
-        const row = Math.floor(y / TILE_SIZE);
+        const dynamicTileSize = rect.width / GRID_SIZE;
+        const col = Math.floor(x / dynamicTileSize);
+        const row = Math.floor(y / dynamicTileSize);
         const clickedIndex = row * GRID_SIZE + col;
         moveTile(clickedIndex);
     });
@@ -527,12 +538,23 @@ document.addEventListener('DOMContentLoaded', () => {
     shuffleButton.addEventListener('mousedown', () => {
         if (isGameActive) {
             container.classList.add('show-preview');
+            previewPressStartTime = Date.now();
+            hintElement.classList.remove('visible');
+            clearTimeout(hintTimeout);
         }
     });
 
     shuffleButton.addEventListener('mouseup', () => {
         if (isGameActive) {
             container.classList.remove('show-preview');
+            const duration = Date.now() - previewPressStartTime;
+            if (duration < 100) {
+                hintElement.classList.add('visible');
+                clearTimeout(hintTimeout);
+                hintTimeout = setTimeout(() => {
+                    hintElement.classList.remove('visible');
+                }, 1000);
+            }
         }
     });
 
@@ -547,6 +569,9 @@ document.addEventListener('DOMContentLoaded', () => {
         shuffleButton.classList.add('button-active');
         if (isGameActive) {
             container.classList.add('show-preview');
+            previewPressStartTime = Date.now();
+            hintElement.classList.remove('visible');
+            clearTimeout(hintTimeout);
         }
     }, { passive: false });
 
@@ -555,6 +580,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const touchWasInside = isTouchInside(event, shuffleButton);
         if (isGameActive) {
             container.classList.remove('show-preview');
+            const duration = Date.now() - previewPressStartTime;
+            if (duration < 100) {
+                hintElement.classList.add('visible');
+                clearTimeout(hintTimeout);
+                hintTimeout = setTimeout(() => {
+                    hintElement.classList.remove('visible');
+                }, 1000);
+            }
         } else if (touchWasInside) {
             shuffleAndStart();
         }
