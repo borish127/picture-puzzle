@@ -1,3 +1,70 @@
+/* ===================================================================
+   Picture Puzzle – Material 3 Expressive Design System
+   =================================================================== */
+
+/* --- Font --- */
+@font-face {
+    font-family: 'Nunito';
+    src: url('fonts/Nunito-VariableFont_wght.ttf') format('truetype');
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+/* --- M3 Design Tokens --- */
+:root {
+    --md-radius-xl: 28px;
+    --md-radius-lg: 24px;
+    --md-radius-md: 16px;
+    --md-radius-sm: 12px;
+
+    --md-surface: rgba(30, 30, 40, 0.60);
+    --md-surface-high: rgba(40, 40, 55, 0.72);
+    --md-surface-border: rgba(255, 255, 255, 0.08);
+    --md-surface-blur: blur(24px);
+
+    --md-on-surface: #E6E1E5;
+    --md-on-surface-variant: rgba(230, 225, 229, 0.7);
+
+    /* M3 Standard easing for smooth glide */
+    --md-easing: cubic-bezier(0.4, 0, 0.2, 1);
+    --md-easing-emphasize: cubic-bezier(0.05, 0.7, 0.1, 1);
+    --md-duration-short: 0.2s;
+    --md-duration-medium: 0.35s;
+    --md-duration-long: 0.5s;
+
+    --md-elevation-1: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.15);
+    --md-elevation-2: 0 2px 6px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.2);
+    --md-elevation-3: 0 4px 12px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.25);
+}
+
+/* --- Base --- */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    text-align: center;
+    background-color: #0a0a0f;
+    color: var(--md-on-surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    height: 100dvh;
+    margin: 0;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-size: min(3.5vmin, 18px);
+}
+
+/* --- Background Blur --- */
 #background-blur {
     position: fixed;
     top: 0;
@@ -7,62 +74,53 @@
     background-image: var(--puzzle-image);
     background-size: cover;
     background-position: center;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: rgba(0, 0, 0, 0.55);
     background-blend-mode: multiply;
-    filter: blur(15px);
-    transform: scale(1.1);
-
+    filter: blur(20px) saturate(1.2);
+    transform: scale(1.15);
     z-index: -1;
 }
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    text-align: center;
-    background-color: #000000;
-    color: #fff;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    /* Fallback for browsers that don't support dvh */
-    height: 100dvh;
-    margin: 0;
-    overflow: hidden;
-    /* Strict no-scroll */
-    padding-bottom: env(safe-area-inset-bottom);
-    box-sizing: border-box;
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
-    font-size: min(3.5vmin, 18px);
-    /* Scalable, capped at 18px */
-}
-
+/* --- Title --- */
 h1 {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
     color: #fff;
     font-size: min(5.5vmin, 32px);
-    /* Scalable, capped at 32px */
-    text-shadow: 0.5vmin 0.5vmin 1vmin rgba(0, 0, 0, 0.9);
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
     margin: min(2vmin, 15px) 0;
     position: relative;
     top: min(4vmin, 120px);
-    /* Visual offset downwards */
+    letter-spacing: 0.02em;
 }
 
+/* --- Game Container --- */
+.game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-evenly;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    padding: min(2vmin, 20px);
+}
+
+/* --- Puzzle Container --- */
 #puzzle-container {
     width: min(85vmin, 450px);
-    /* Relative to viewport min dimension, capped */
     max-width: min(85vmin, 450px);
     max-height: min(85vmin, 450px);
-    /* Height is determined by aspect-ratio 1/1 */
     height: auto;
     aspect-ratio: 1 / 1;
     margin: min(1vmin, 10px) auto;
     position: relative;
-    border-radius: min(2vmin, 12px);
-    box-shadow: 0 1vmin 2.5vmin rgba(0, 0, 0, 0.2);
-    transition: border-color 0.5s ease;
-    background-color: #000;
+    border-radius: var(--md-radius-xl);
+    box-shadow: var(--md-elevation-3);
+    transition: border-color var(--md-duration-long) var(--md-easing);
+    background-color: #0a0a0f;
+    overflow: hidden;
+    /* Clips tiles during corner transitions */
 }
 
 #puzzle-container::after {
@@ -72,14 +130,15 @@ h1 {
     left: 0;
     width: 100%;
     height: 100%;
-    border-radius: 8px;
-    border: 1px solid transparent;
+    border-radius: var(--md-radius-xl);
+    border: 1.5px solid transparent;
     pointer-events: none;
     z-index: 10;
-    transition: border-color 0.5s ease;
+    transition: border-color var(--md-duration-long) var(--md-easing);
     box-sizing: border-box;
 }
 
+/* --- Preview Image --- */
 #preview-image {
     position: absolute;
     top: 0;
@@ -90,10 +149,9 @@ h1 {
     background-size: 100% 100%;
     opacity: 0;
     z-index: 2;
-    transition: opacity 0.2s ease-in-out;
+    transition: opacity var(--md-duration-short) ease-in-out;
     pointer-events: none;
-    border-radius: 8px;
-    /* border: 1px solid white; Removed to prevent zoom artifacts */
+    border-radius: var(--md-radius-xl);
     box-sizing: border-box;
 }
 
@@ -104,6 +162,65 @@ h1 {
 #puzzle-container.show-preview .tile {
     z-index: 0;
     pointer-events: none;
+}
+
+/* --- Tiles ---
+   The "smooth glide" fix:
+   - transition includes border-radius so corner changes animate with the slide
+   - overflow:hidden on #puzzle-container clips any tile that overshoots during
+     the radius transition, preventing the "corner clipping" glitch
+   - No scale/zoom effects — pure top/left glide only
+*/
+.tile {
+    width: 25%;
+    height: 25%;
+    position: absolute;
+    background-image: var(--puzzle-image);
+    background-size: 400% 400%;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-sizing: border-box;
+    transition:
+        top var(--md-duration-short) var(--md-easing),
+        left var(--md-duration-short) var(--md-easing),
+        border-radius var(--md-duration-short) var(--md-easing),
+        border-color var(--md-duration-long) var(--md-easing),
+        opacity var(--md-duration-short) ease-in-out;
+    will-change: top, left;
+    border-radius: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Corner radii for edge tiles — matches container's 28px */
+.tile.top-left-corner {
+    border-top-left-radius: var(--md-radius-xl);
+}
+
+.tile.top-right-corner {
+    border-top-right-radius: var(--md-radius-xl);
+}
+
+.tile.bottom-left-corner {
+    border-bottom-left-radius: var(--md-radius-xl);
+}
+
+.tile.bottom-right-corner {
+    border-bottom-right-radius: var(--md-radius-xl);
+}
+
+/* --- Solved State --- */
+#puzzle-container.solved .tile {
+    border-color: transparent;
+    transition: opacity var(--md-duration-short) ease, border-color var(--md-duration-short) ease;
+    pointer-events: none;
+}
+
+#puzzle-container.solved {
+    overflow: hidden;
+}
+
+#puzzle-container.solved::after {
+    border-color: rgba(255, 255, 255, 0.6);
 }
 
 @keyframes winAnimationScale {
@@ -120,77 +237,36 @@ h1 {
     }
 }
 
-.tile {
-    width: 25%;
-    height: 25%;
-    position: absolute;
-    background-image: var(--puzzle-image);
-    background-size: 400% 400%;
-    /* Image is 4x the tile size */
-    cursor: pointer;
-    border: 1px solid #fff;
-    box-sizing: border-box;
-    transition: top 0.25s ease-out, left 0.25s ease-out, border 0.5s ease, border-radius 0s, opacity 0.2s ease-in-out;
-    -webkit-tap-highlight-color: transparent;
-    border-radius: 0;
-}
-
-.tile.top-left-corner {
-    border-top-left-radius: 8px;
-}
-
-.tile.top-right-corner {
-    border-top-right-radius: 8px;
-}
-
-.tile.bottom-left-corner {
-    border-bottom-left-radius: 8px;
-}
-
-.tile.bottom-right-corner {
-    border-bottom-right-radius: 8px;
-}
-
-#puzzle-container.solved .tile {
-    border-color: transparent;
-    transition: opacity 0.2s ease, border-color 0.2s ease;
-    pointer-events: none;
-}
-
-#puzzle-container.solved {
-    overflow: hidden;
-}
-
-#puzzle-container.solved::after {
-    border-color: #fff;
-
-}
-
 #puzzle-container.solved #preview-image {
     opacity: 1;
     animation: winAnimationScale 0.8s ease-out forwards;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--md-duration-short) ease;
 }
 
+/* --- Message --- */
 #message {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 600;
     margin-top: min(2vmin, 15px);
     font-size: min(4vmin, 18px);
-    color: #fff;
+    color: var(--md-on-surface);
     min-height: min(6vmin, 30px);
-    text-shadow: 0.2vmin 0.2vmin 0.5vmin rgba(0, 0, 0, 0.7);
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
     white-space: pre-line;
-    line-height: 1.4;
+    line-height: 1.5;
 }
 
 .message-highlight {
     font-size: 1.3em !important;
-    font-weight: bold;
-    background-color: rgba(0, 0, 0, 0.85);
+    font-weight: 700;
+    background: var(--md-surface-high);
+    backdrop-filter: var(--md-surface-blur);
+    -webkit-backdrop-filter: var(--md-surface-blur);
     border: 2px solid #ffeb3b;
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 0 0 15px rgba(255, 235, 59, 0.6);
-    animation: highlightPulse 2s infinite;
+    padding: 18px 22px;
+    border-radius: var(--md-radius-lg);
+    box-shadow: 0 0 20px rgba(255, 235, 59, 0.4), var(--md-elevation-2);
+    animation: highlightPulse 2.5s ease-in-out infinite;
     max-width: 90%;
     margin-left: auto;
     margin-right: auto;
@@ -199,29 +275,32 @@ h1 {
 @keyframes highlightPulse {
     0% {
         transform: scale(1);
-        box-shadow: 0 0 15px rgba(255, 235, 59, 0.6);
+        box-shadow: 0 0 15px rgba(255, 235, 59, 0.4), var(--md-elevation-2);
     }
 
     50% {
-        transform: scale(1.02);
-        box-shadow: 0 0 25px rgba(255, 235, 59, 0.9);
+        transform: scale(1.015);
+        box-shadow: 0 0 30px rgba(255, 235, 59, 0.65), var(--md-elevation-2);
     }
 
     100% {
         transform: scale(1);
-        box-shadow: 0 0 15px rgba(255, 235, 59, 0.6);
+        box-shadow: 0 0 15px rgba(255, 235, 59, 0.4), var(--md-elevation-2);
     }
 }
 
+/* --- Countdown Timer --- */
 #countdown-timer {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
     margin-top: min(1.5vmin, 10px);
     font-size: min(4.5vmin, 20px);
     color: #ffeb3b;
-    font-weight: bold;
-    text-shadow: 0.2vmin 0.2vmin 0.5vmin rgba(0, 0, 0, 0.8);
+    text-shadow: 0 1px 8px rgba(255, 235, 59, 0.3);
     min-height: min(5.5vmin, 25px);
 }
 
+/* --- Button Container --- */
 #button-container {
     display: flex;
     flex-wrap: wrap;
@@ -234,23 +313,32 @@ h1 {
     margin-top: min(2vmin, 15px);
 }
 
+/* --- Buttons (M3 Expressive Tonal) --- */
 .button,
 #shuffle-button,
 #external-link-button {
-    padding: min(2.5vmin, 12px) min(5vmin, 24px);
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    padding: min(2.8vmin, 14px) min(5.5vmin, 28px);
     font-size: min(4vmin, 16px);
-    font-weight: bold;
     cursor: pointer;
-    border-radius: min(5vmin, 24px);
+    border-radius: var(--md-radius-xl);
     border: none;
     color: white;
-    box-shadow: 0 0.5vmin 1.25vmin rgba(0, 0, 0, 0.2);
-    transition: background-color 0.2s, color 0.2s, opacity 0.3s, visibility 0.3s;
+    box-shadow: var(--md-elevation-1);
+    transition:
+        filter var(--md-duration-short) var(--md-easing),
+        transform var(--md-duration-short) var(--md-easing),
+        box-shadow var(--md-duration-short) var(--md-easing),
+        opacity var(--md-duration-medium) var(--md-easing),
+        visibility var(--md-duration-medium) var(--md-easing);
     text-decoration: none;
     user-select: none;
     -webkit-user-select: none;
     -moz-user-select: none;
     -webkit-tap-highlight-color: transparent;
+    letter-spacing: 0.03em;
+    will-change: transform, filter;
 }
 
 #shuffle-button {
@@ -259,7 +347,9 @@ h1 {
 
 #shuffle-button:hover,
 #shuffle-button.button-active {
-    filter: brightness(0.9);
+    filter: brightness(0.88);
+    transform: scale(0.97);
+    box-shadow: var(--md-elevation-2);
 }
 
 #external-link-button {
@@ -269,8 +359,19 @@ h1 {
 #external-link-button:hover,
 #external-link-button.button-active {
     background-color: #218838;
+    filter: brightness(0.92);
+    transform: scale(0.97);
+    box-shadow: var(--md-elevation-2);
 }
 
+/* Focus-visible for keyboard accessibility */
+#shuffle-button:focus-visible,
+#external-link-button:focus-visible {
+    outline: 3px solid rgba(255, 255, 255, 0.6);
+    outline-offset: 3px;
+}
+
+/* --- Hidden Utility --- */
 .hidden {
     opacity: 0;
     visibility: hidden;
@@ -278,6 +379,7 @@ h1 {
     position: absolute;
 }
 
+/* --- Confetti --- */
 .confetti-container {
     position: absolute;
     top: 0;
@@ -287,6 +389,7 @@ h1 {
     pointer-events: none;
     z-index: 3;
     overflow: hidden;
+    border-radius: var(--md-radius-xl);
 }
 
 .confetti-piece {
@@ -298,6 +401,7 @@ h1 {
     opacity: 0;
     animation: fallConfetti 3s ease-in forwards;
     transform: translate(-50%, -50%) rotateZ(0deg);
+    will-change: transform, opacity;
 }
 
 @keyframes fallConfetti {
@@ -316,20 +420,10 @@ h1 {
     }
 }
 
-.game-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-evenly;
-    /* Distribute space evenly */
-    width: 100%;
-    height: 100%;
-    /* Fill viewport */
-    max-width: none;
-    padding: min(2vmin, 20px);
-    box-sizing: border-box;
-}
-
+/* --- Layout: Solved Desktop Grid ---
+   Horizontal balance: puzzle + message share the same central axis (equator).
+   Single-row grid with align-items: center keeps both vertically centered.
+*/
 @media (max-width: 767px) {
     .game-container.layout-solved #puzzle-container {
         max-width: 80vmin;
@@ -341,70 +435,81 @@ h1 {
     .game-container.layout-solved {
         display: grid;
         grid-template-columns: auto minmax(min(30vmin, 300px), min(40vmin, 400px));
-        grid-template-rows: auto auto;
+        grid-template-rows: 1fr auto;
         grid-template-areas:
             "puzzle message"
-            "buttons message";
+            "buttons buttons";
         gap: min(3vmin, 20px);
         align-items: center;
         justify-content: center;
     }
 
-    #puzzle-container {
+    .game-container.layout-solved #puzzle-container {
         grid-area: puzzle;
         margin: 0;
+        align-self: center;
     }
 
-    #button-container {
+    .game-container.layout-solved #message {
+        grid-area: message;
+        margin-top: 0;
+        text-align: left;
+        align-self: center;
+    }
+
+    .game-container.layout-solved #button-container {
         grid-area: buttons;
         justify-content: center;
         margin-top: 0;
     }
-
-    #message {
-        grid-area: message;
-        margin-top: 0;
-        text-align: left;
-    }
 }
 
-/* Keyframes for smooth fade appearance */
+/* --- Fade-in Animation --- */
 @keyframes fadeIn {
     from {
         opacity: 0;
+        transform: translateY(6px);
     }
 
     to {
         opacity: 1;
+        transform: translateY(0);
     }
 }
 
 #message.visible {
-    animation: fadeIn 0.8s ease-in-out forwards;
+    animation: fadeIn 0.8s var(--md-easing-emphasize) forwards;
 }
 
 #external-link-button.visible {
-    animation: fadeIn 0.8s ease-in-out forwards;
+    animation: fadeIn 0.8s var(--md-easing-emphasize) forwards;
 }
 
+/* --- Preview Hint (M3 Tonal Surface) --- */
 #preview-hint {
     position: absolute;
     bottom: min(12vmin, 60px);
-    /* Above the button */
     left: 50%;
     transform: translateX(-50%);
-    background-color: rgba(0, 0, 0, 0.9);
-    color: #fff;
-    padding: min(2vmin, 10px) min(3vmin, 15px);
-    border-radius: min(1.5vmin, 8px);
+    background: var(--md-surface-high);
+    backdrop-filter: var(--md-surface-blur);
+    -webkit-backdrop-filter: var(--md-surface-blur);
+    border: 1px solid var(--md-surface-border);
+    color: var(--md-on-surface);
+    padding: min(2vmin, 10px) min(3vmin, 16px);
+    border-radius: var(--md-radius-lg);
+    font-family: 'Nunito', sans-serif;
+    font-weight: 600;
     font-size: min(3.5vmin, 14px);
     pointer-events: none;
     white-space: nowrap;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transition:
+        opacity var(--md-duration-medium) var(--md-easing),
+        transform var(--md-duration-medium) var(--md-easing);
     z-index: 100;
-    box-shadow: 0 0.5vmin 2vmin rgba(0, 0, 0, 0.3);
+    box-shadow: var(--md-elevation-2);
 }
 
 #preview-hint::after {
@@ -415,7 +520,7 @@ h1 {
     margin-left: -6px;
     border-width: 6px;
     border-style: solid;
-    border-color: rgba(0, 0, 0, 0.9) transparent transparent transparent;
+    border-color: var(--md-surface-high) transparent transparent transparent;
 }
 
 #preview-hint.visible {

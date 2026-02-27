@@ -1,5 +1,25 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const imageMap = {
+/* ===================================================================
+   Picture Puzzle – Refactored Game Engine
+   Module pattern, consolidated state, M3 visual feedback
+   =================================================================== */
+
+const PuzzleGame = (() => {
+    'use strict';
+
+    // ── CONFIG ──────────────────────────────────────────────────────
+    const CONFIG = {
+        GRID_SIZE: 4,
+        TILE_COUNT: 16, // GRID_SIZE * GRID_SIZE
+        SWIPE_THRESHOLD: 30,
+        SHUFFLE_ITERATIONS: 300,
+        COUNTDOWN_DELAY_MS: 60000,
+        COUNTDOWN_DURATION_S: 60,
+        HINT_DISPLAY_MS: 1000,
+        SHORT_PRESS_THRESHOLD_MS: 100,
+        SERIES_C_LINK_DELAY_MS: 4000,
+    };
+
+    const IMAGE_MAP = {
         'default': 'pictures/default.webp',
         'd1': 'pictures/d1.webp',
         'd2': 'pictures/d2.webp',
@@ -17,139 +37,178 @@ document.addEventListener('DOMContentLoaded', () => {
         'c6': 'pictures/c6.webp',
     };
 
-    // const CONTAINER_SIZE = 400; // Removed fixed size
-    const GRID_SIZE = 4;
-    const TILE_COUNT = GRID_SIZE * GRID_SIZE;
-    // const TILE_SIZE = CONTAINER_SIZE / GRID_SIZE; // Removed fixed size
+    // Pre-computed solved state: [1, 2, 3, ..., 15, 0]
+    const SOLVED_STATE = Array.from({ length: CONFIG.TILE_COUNT - 1 }, (_, i) => i + 1).concat(0);
+    // Full state for initial display: [1, 2, 3, ..., 16]
+    const FULL_STATE = Array.from({ length: CONFIG.TILE_COUNT }, (_, i) => i + 1);
 
-    const container = document.getElementById('puzzle-container');
-    const message = document.getElementById('message');
-    const shuffleButton = document.getElementById('shuffle-button');
-    const externalLinkButton = document.getElementById('external-link-button');
-    const countdownElement = document.getElementById('countdown-timer');
-    const confettiContainer = container.querySelector('.confetti-container');
-    const gameContainer = document.querySelector('.game-container');
-    const hintElement = document.getElementById('preview-hint');
+    // ── STATE ───────────────────────────────────────────────────────
+    const state = {
+        tiles: [],
+        isGameActive: false,
+        hasWonOnce: false,
+        countdownTimeout: null,
+        countdownInterval: null,
+        previewPressStartTime: 0,
+        hintTimeout: null,
+        touchStartX: 0,
+        touchStartY: 0,
+        winMessageText: '',
+        imageId: null,
+        isSeriesD: false,
+        isSeriesC: false,
+    };
 
-    const pieceElements = {};
-    let tiles = [];
-    let isGameActive = false;
-    let hasWonOnce = false;
-    let countdownTimeout;
-    let countdownInterval;
-    let previewPressStartTime = 0;
-    let hintTimeout;
-    const colorThief = new ColorThief();
+    // ── DOM REFS ────────────────────────────────────────────────────
+    const dom = {};
 
-    function isMobileDevice() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || navigator.maxTouchPoints > 0;
+    // ── UTILITIES ───────────────────────────────────────────────────
+    function getRowCol(index) {
+        return {
+            row: Math.floor(index / CONFIG.GRID_SIZE),
+            col: index % CONFIG.GRID_SIZE,
+        };
     }
 
-    const solvedState = Array.from({ length: TILE_COUNT - 1 }, (_, i) => i + 1).concat(0);
-    const fullState = Array.from({ length: TILE_COUNT }, (_, i) => i + 1);
+    function isMobileDevice() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+            || navigator.maxTouchPoints > 0;
+    }
 
-    let touchStartX = 0;
-    let touchStartY = 0;
-    const SWIPE_THRESHOLD = 30;
+    function isTouchInside(event, element) {
+        if (!event.changedTouches || event.changedTouches.length === 0) return false;
+        const touch = event.changedTouches[0];
+        const rect = element.getBoundingClientRect();
+        return (
+            touch.clientX >= rect.left &&
+            touch.clientX <= rect.right &&
+            touch.clientY >= rect.top &&
+            touch.clientY <= rect.bottom
+        );
+    }
+
+    function isSolved() {
+        for (let i = 0; i < CONFIG.TILE_COUNT; i++) {
+            if (state.tiles[i] !== SOLVED_STATE[i]) return false;
+        }
+        return true;
+    }
+
+    // ── IMAGE SETUP ─────────────────────────────────────────────────
+    function getImageUrlFromParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = urlParams.get('id');
+        return IMAGE_MAP[id] || IMAGE_MAP['default'];
+    }
 
     function setPuzzleImage(imageUrl) {
-        const urlWithPath = `url('${imageUrl}')`;
-        document.documentElement.style.setProperty('--puzzle-image', urlWithPath);
+        document.documentElement.style.setProperty('--puzzle-image', `url('${imageUrl}')`);
 
         const img = new Image();
-        img.crossOrigin = 'Anonymous';
+        img.crossOrigin = 'anonymous';
         img.src = imageUrl;
 
+        // Timeout fallback if image never loads
+        const imgTimeout = setTimeout(() => {
+            applyFallbackButtonColor();
+        }, 8000);
+
         img.onload = () => {
+            clearTimeout(imgTimeout);
             try {
-                const dominantColor = colorThief.getColor(img);
-                const colorRgb = `rgb(${dominantColor[0]}, ${dominantColor[1]}, ${dominantColor[2]})`;
+                const colorThief = new ColorThief();
+                const [r, g, b] = colorThief.getColor(img);
+                dom.shuffleButton.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
 
-                shuffleButton.style.backgroundColor = colorRgb;
-
-                const luminance = (0.299 * dominantColor[0] + 0.587 * dominantColor[1] + 0.114 * dominantColor[2]) / 255;
-                shuffleButton.style.color = luminance > 0.5 ? '#000' : '#fff';
+                const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                dom.shuffleButton.style.color = luminance > 0.5 ? '#1a1a2e' : '#ffffff';
             } catch (e) {
-                console.error("Error al procesar el color de la imagen:", e);
-                shuffleButton.style.backgroundColor = '#007bff';
-                shuffleButton.style.color = '#fff';
+                console.error('Error al procesar el color de la imagen:', e);
+                applyFallbackButtonColor();
             }
         };
+
         img.onerror = () => {
-            console.error("No se pudo cargar la imagen:", imageUrl);
-            if (imageUrl !== imageMap['default']) {
-                setPuzzleImage(imageMap['default']);
+            clearTimeout(imgTimeout);
+            console.error('No se pudo cargar la imagen:', imageUrl);
+            if (imageUrl !== IMAGE_MAP['default']) {
+                setPuzzleImage(IMAGE_MAP['default']);
+                return;
             }
+            applyFallbackButtonColor();
         };
 
         initPuzzle();
     }
 
-    function getImageUrlFromUrl() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const imageId = urlParams.get('id');
-        return imageMap[imageId] || imageMap['default'];
+    function applyFallbackButtonColor() {
+        dom.shuffleButton.style.backgroundColor = '#007bff';
+        dom.shuffleButton.style.color = '#ffffff';
     }
 
+    // ── PUZZLE PIECES ───────────────────────────────────────────────
+    const pieceElements = {};
+
     function createPieces() {
-        for (let i = 1; i <= TILE_COUNT; i++) {
+        for (let i = 1; i <= CONFIG.TILE_COUNT; i++) {
             const piece = document.createElement('div');
             piece.classList.add('tile');
 
             const { row, col } = getRowCol(i - 1);
-            // Use percentages for background position
-            const xPercent = col * 100 / (GRID_SIZE - 1);
-            const yPercent = row * 100 / (GRID_SIZE - 1);
+            const xPercent = col * 100 / (CONFIG.GRID_SIZE - 1);
+            const yPercent = row * 100 / (CONFIG.GRID_SIZE - 1);
             piece.style.backgroundPosition = `${xPercent}% ${yPercent}%`;
 
             pieceElements[i] = piece;
-            container.appendChild(piece);
+            dom.container.appendChild(piece);
         }
     }
 
     function updatePositions() {
-
+        // Clear corner classes
         Object.values(pieceElements).forEach(el => {
             el.classList.remove('top-left-corner', 'top-right-corner', 'bottom-left-corner', 'bottom-right-corner');
         });
 
-        tiles.forEach((pieceId, index) => {
+        state.tiles.forEach((pieceId, index) => {
             if (pieceId === 0) return;
 
             const pieceElement = pieceElements[pieceId];
             const { row, col } = getRowCol(index);
 
-            // Use percentages for positioning
-            pieceElement.style.top = `${row * 100 / GRID_SIZE}%`;
-            pieceElement.style.left = `${col * 100 / GRID_SIZE}%`;
+            pieceElement.style.top = `${row * 100 / CONFIG.GRID_SIZE}%`;
+            pieceElement.style.left = `${col * 100 / CONFIG.GRID_SIZE}%`;
 
+            // Assign corner classes
             if (index === 0) {
                 pieceElement.classList.add('top-left-corner');
-            } else if (index === GRID_SIZE - 1) {
+            } else if (index === CONFIG.GRID_SIZE - 1) {
                 pieceElement.classList.add('top-right-corner');
-            } else if (index === TILE_COUNT - GRID_SIZE) {
+            } else if (index === CONFIG.TILE_COUNT - CONFIG.GRID_SIZE) {
                 pieceElement.classList.add('bottom-left-corner');
-            } else if (index === TILE_COUNT - 1) {
+            } else if (index === CONFIG.TILE_COUNT - 1) {
                 pieceElement.classList.add('bottom-right-corner');
             }
         });
     }
 
-    function initPuzzle() {
-        isGameActive = false;
-        container.classList.remove('solved');
-        container.classList.remove('show-preview');
-        message.classList.remove('message-highlight');
-        shuffleButton.classList.remove('hidden');
-        hintElement.classList.remove('visible');
-        clearTimeout(hintTimeout);
-        shuffleButton.textContent = 'Mezclar y Jugar';
-        externalLinkButton.classList.add('hidden');
-        countdownElement.classList.add('hidden');
-        clearTimeout(countdownTimeout);
-        clearInterval(countdownInterval);
 
-        tiles = [...fullState];
+
+    // ── GAME LOGIC ──────────────────────────────────────────────────
+    function initPuzzle() {
+        state.isGameActive = false;
+        dom.container.classList.remove('solved', 'show-preview');
+        dom.message.classList.remove('message-highlight');
+        dom.shuffleButton.classList.remove('hidden');
+        dom.hintElement.classList.remove('visible');
+        clearTimeout(state.hintTimeout);
+        dom.shuffleButton.textContent = 'Mezclar y Jugar';
+        dom.externalLinkButton.classList.add('hidden');
+        dom.countdownElement.classList.add('hidden');
+        clearTimeout(state.countdownTimeout);
+        clearInterval(state.countdownInterval);
+
+        state.tiles = [...FULL_STATE];
         Object.values(pieceElements).forEach(el => {
             el.style.display = 'block';
             el.style.transform = 'none';
@@ -160,173 +219,150 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function moveTile(clickedIndex) {
-        if (!isGameActive) return;
+        if (!state.isGameActive) return;
 
-        const emptyIndex = tiles.indexOf(0);
+        const emptyIndex = state.tiles.indexOf(0);
         const { row: clickedRow, col: clickedCol } = getRowCol(clickedIndex);
         const { row: emptyRow, col: emptyCol } = getRowCol(emptyIndex);
 
+        let moved = false;
+
         if (clickedRow === emptyRow) {
+            // Same row — slide horizontally
             const step = (clickedIndex < emptyIndex) ? 1 : -1;
             for (let i = emptyIndex; i !== clickedIndex; i -= step) {
-                tiles[i] = tiles[i - step];
+                state.tiles[i] = state.tiles[i - step];
             }
+            moved = true;
         } else if (clickedCol === emptyCol) {
-            const step = (clickedIndex < emptyIndex) ? GRID_SIZE : -GRID_SIZE;
+            // Same column — slide vertically
+            const step = (clickedIndex < emptyIndex) ? CONFIG.GRID_SIZE : -CONFIG.GRID_SIZE;
             for (let i = emptyIndex; i !== clickedIndex; i -= step) {
-                tiles[i] = tiles[i - step];
+                state.tiles[i] = state.tiles[i - step];
             }
-        } else {
-            return;
+            moved = true;
         }
 
-        tiles[clickedIndex] = 0;
+        if (!moved) return;
+
+        state.tiles[clickedIndex] = 0;
         updatePositions();
         checkForWin();
     }
 
-    function getRowCol(index) {
-        return {
-            row: Math.floor(index / GRID_SIZE),
-            col: index % GRID_SIZE,
-        };
+    function getMovableTiles(emptyIndex) {
+        const movable = [];
+        const { row, col } = getRowCol(emptyIndex);
+        if (row > 0) movable.push(emptyIndex - CONFIG.GRID_SIZE);
+        if (row < CONFIG.GRID_SIZE - 1) movable.push(emptyIndex + CONFIG.GRID_SIZE);
+        if (col > 0) movable.push(emptyIndex - 1);
+        if (col < CONFIG.GRID_SIZE - 1) movable.push(emptyIndex + 1);
+        return movable;
     }
 
+    // ── WIN LOGIC ───────────────────────────────────────────────────
     function checkForWin() {
-        if (JSON.stringify(tiles) === JSON.stringify(solvedState)) {
-            isGameActive = false;
-            hasWonOnce = true;
-            shuffleButton.textContent = 'Mezclar y Jugar';
-
-            clearTimeout(countdownTimeout);
-            clearInterval(countdownInterval);
-            countdownElement.classList.add('hidden');
-
-            // --- ANIMATION START (Simplified FLIP) ---
-            // 1. Capture Start Position of the PUZZLE (not wrapper)
-            const firstRect = container.getBoundingClientRect();
-
-            // 2. State Change: Apply class AND unhide buttons
-            container.classList.add('solved');
-
-            pieceElements[TILE_COUNT].style.display = 'block';
-            pieceElements[TILE_COUNT].classList.add('bottom-right-corner');
-
-            // Hide countdown
-            countdownElement.classList.add('hidden');
-
-            // Unhide buttons immediately (Opacity 0) to trigger full layout expansion
-            shuffleButton.classList.remove('hidden');
-            shuffleButton.style.opacity = '0';
-
-            // Check if it is NOT Series D to apply layout change
-            const urlParams = new URLSearchParams(window.location.search);
-            const imageId = urlParams.get('id');
-            const isSeriesD = imageId && imageMap[imageId] && imageId !== 'default' && !imageId.startsWith('c');
-            const isSeriesC = imageId && imageId.startsWith('c');
-
-            if (!isSeriesD) {
-                gameContainer.classList.add('layout-solved');
+        if (!isSolved()) {
+            if (!state.hasWonOnce) {
+                dom.message.textContent = '';
             }
-
-            if (isSeriesC || !isSeriesD) {
-                // Keep external link hidden initially, will animate in
-                externalLinkButton.classList.add('hidden');
-                externalLinkButton.classList.remove('visible'); // Reset animation
-            }
-
-            // 3. Capture End Position of the PUZZLE
-            const lastRect = container.getBoundingClientRect();
-            const deltaX = firstRect.left - lastRect.left;
-            const deltaY = firstRect.top - lastRect.top;
-
-            // 4. Invert & Play
-            const triggerWinState = () => {
-                // Message
-                message.textContent = winMessageText;
-                if (isSeriesC) message.classList.add('message-highlight');
-
-                // Show message (animates via CSS .visible)
-                message.style.visibility = 'visible';
-                setTimeout(() => message.classList.add('visible'), 100);
-
-                // Show external link (animates via CSS .visible)
-                const linkDelay = isSeriesC ? 4000 : 600;
-                setTimeout(() => {
-                    externalLinkButton.classList.remove('hidden');
-                    externalLinkButton.classList.add('visible');
-                }, linkDelay);
-
-                // Show shuffle button
-                shuffleButton.classList.remove('hidden');
-                // Ensure it's visible if we messed with opacity before
-                shuffleButton.style.opacity = '1';
-            };
-
-            // Only run WAAPI animation on Desktop (non-mobile)
-            if (!isMobileDevice() && (deltaX !== 0 || deltaY !== 0)) {
-                const animation = container.animate([
-                    { transform: `translate(${deltaX}px, ${deltaY}px)` },
-                    { transform: 'none' }
-                ], { duration: 800, easing: 'ease-in-out' });
-                animation.onfinish = triggerWinState;
-            } else {
-                // Mobile or no movement
-                triggerWinState();
-            }
-            // --- ANIMATION END ---
-
-            // Message handling: Hide initially, show after animation
-            message.style.opacity = '0';
-            message.style.visibility = 'hidden';
-            message.style.transition = 'opacity 0.5s ease-in-out';
-            message.textContent = winMessageText; // Set text but keep hidden
-
-            if (isSeriesC) {
-                message.classList.add('message-highlight');
-            }
-
-            // Delay message appearance until after puzzle move (approx 800ms)
-            setTimeout(() => {
-                message.style.visibility = 'visible';
-                message.style.opacity = '1';
-
-                // Show link button logic (chained after message)
-                if (isSeriesC) {
-                    setTimeout(() => {
-                        externalLinkButton.classList.remove('hidden');
-                    }, 4000); // 4s AFTER message appears
-                } else {
-                    // For others, show immediately with message or slightly after
-                    externalLinkButton.classList.remove('hidden');
-                }
-
-                shuffleButton.classList.remove('hidden');
-
-            }, 800); // Matches animation duration
-
-            generateConfetti();
-
-            Object.values(pieceElements).forEach(el => {
-                el.style.transform = 'scale(1.005) translateZ(0)';
-                el.style.zIndex = '1';
-            });
-        } else {
-            if (!hasWonOnce) {
-                message.textContent = '';
-            }
+            return;
         }
+
+        state.isGameActive = false;
+        state.hasWonOnce = true;
+        dom.shuffleButton.textContent = 'Mezclar y Jugar';
+
+        // Stop countdowns
+        clearTimeout(state.countdownTimeout);
+        clearInterval(state.countdownInterval);
+        dom.countdownElement.classList.add('hidden');
+
+        // --- FLIP ANIMATION ---
+        const firstRect = dom.container.getBoundingClientRect();
+
+        // Apply solved visual state
+        dom.container.classList.add('solved');
+        pieceElements[CONFIG.TILE_COUNT].style.display = 'block';
+        pieceElements[CONFIG.TILE_COUNT].classList.add('bottom-right-corner');
+
+
+
+        // Prepare buttons (hidden but in layout for measurement)
+        dom.shuffleButton.classList.remove('hidden');
+        dom.shuffleButton.style.opacity = '0';
+
+        // Layout class for non-Series-D
+        if (!state.isSeriesD) {
+            dom.gameContainer.classList.add('layout-solved');
+        }
+
+        if (state.isSeriesC || !state.isSeriesD) {
+            dom.externalLinkButton.classList.add('hidden');
+            dom.externalLinkButton.classList.remove('visible');
+        }
+
+        // Capture end position
+        const lastRect = dom.container.getBoundingClientRect();
+        const deltaX = firstRect.left - lastRect.left;
+        const deltaY = firstRect.top - lastRect.top;
+
+        // Consolidated win-state trigger — called exactly once
+        const triggerWinState = () => {
+            // Message
+            dom.message.textContent = state.winMessageText;
+            if (state.isSeriesC) dom.message.classList.add('message-highlight');
+
+            dom.message.style.visibility = 'visible';
+            dom.message.style.opacity = '1';
+
+            // External link visibility (delayed for Series C)
+            const linkDelay = state.isSeriesC ? CONFIG.SERIES_C_LINK_DELAY_MS : 600;
+            setTimeout(() => {
+                dom.externalLinkButton.classList.remove('hidden');
+                dom.externalLinkButton.classList.add('visible');
+            }, linkDelay);
+
+            // Show shuffle button
+            dom.shuffleButton.classList.remove('hidden');
+            dom.shuffleButton.style.opacity = '1';
+        };
+
+        // Prepare message (hidden until animation finishes)
+        dom.message.style.opacity = '0';
+        dom.message.style.visibility = 'hidden';
+        dom.message.style.transition = 'opacity 0.5s ease-in-out';
+        dom.message.textContent = state.winMessageText;
+
+        if (state.isSeriesC) {
+            dom.message.classList.add('message-highlight');
+        }
+
+        // WAAPI animation only on desktop if there's movement
+        if (!isMobileDevice() && (deltaX !== 0 || deltaY !== 0)) {
+            const animation = dom.container.animate([
+                { transform: `translate(${deltaX}px, ${deltaY}px)` },
+                { transform: 'none' }
+            ], { duration: 800, easing: 'ease-in-out' });
+            animation.onfinish = triggerWinState;
+        } else {
+            triggerWinState();
+        }
+
+        generateConfetti();
+
+
     }
 
+    // ── SHUFFLE & START ─────────────────────────────────────────────
     function shuffleAndStart() {
-        isGameActive = true;
-        shuffleButton.textContent = 'Preview';
-        container.classList.remove('solved');
-        container.classList.remove('show-preview');
-        hintElement.classList.remove('visible');
-        clearTimeout(hintTimeout);
-        message.classList.remove('message-highlight');
-        gameContainer.classList.remove('layout-solved');
+        state.isGameActive = true;
+        dom.shuffleButton.textContent = 'Preview';
+        dom.container.classList.remove('solved', 'show-preview');
+        dom.hintElement.classList.remove('visible');
+        clearTimeout(state.hintTimeout);
+        dom.message.classList.remove('message-highlight');
+        dom.gameContainer.classList.remove('layout-solved');
 
         Object.values(pieceElements).forEach(el => {
             el.style.transform = 'none';
@@ -334,82 +370,75 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         clearConfetti();
-        clearTimeout(countdownTimeout);
-        clearInterval(countdownInterval);
-        countdownElement.classList.add('hidden');
+        clearTimeout(state.countdownTimeout);
+        clearInterval(state.countdownInterval);
+        dom.countdownElement.classList.add('hidden');
 
-        // Start countdown logic only if the user hasn't won yet AND it is Series D
-        const urlParams = new URLSearchParams(window.location.search);
-        const imageId = urlParams.get('id');
-        const isSeriesD = imageId && imageMap[imageId] && imageId !== 'default' && !imageId.startsWith('c');
-
-        if (!hasWonOnce && isSeriesD) {
-            countdownTimeout = setTimeout(() => {
+        // Countdown only for Series D (first win)
+        if (!state.hasWonOnce && state.isSeriesD) {
+            state.countdownTimeout = setTimeout(() => {
                 startCountdown();
-            }, 60000); // 1 minute delay
+            }, CONFIG.COUNTDOWN_DELAY_MS);
         }
 
-        pieceElements[TILE_COUNT].style.display = 'none';
-        tiles = [...solvedState];
+        pieceElements[CONFIG.TILE_COUNT].style.display = 'none';
+        state.tiles = [...SOLVED_STATE];
 
-        for (let i = 0; i < 300; i++) {
-            const emptyIndex = tiles.indexOf(0);
+        // Fisher-Yates-like random moves to ensure solvability
+        for (let i = 0; i < CONFIG.SHUFFLE_ITERATIONS; i++) {
+            const emptyIndex = state.tiles.indexOf(0);
             const movableIndices = getMovableTiles(emptyIndex);
             const randomIndex = movableIndices[Math.floor(Math.random() * movableIndices.length)];
-            [tiles[randomIndex], tiles[emptyIndex]] = [tiles[emptyIndex], tiles[randomIndex]];
+            [state.tiles[randomIndex], state.tiles[emptyIndex]] = [state.tiles[emptyIndex], state.tiles[randomIndex]];
         }
 
         updatePositions();
-        if (!hasWonOnce) {
-            message.textContent = '';
+
+        if (!state.hasWonOnce) {
+            dom.message.textContent = '';
         }
     }
 
+    // ── COUNTDOWN ───────────────────────────────────────────────────
     function startCountdown() {
-        let timeLeft = 60; // 1 minute in seconds
-        countdownElement.classList.remove('hidden');
+        let timeLeft = CONFIG.COUNTDOWN_DURATION_S;
+        dom.countdownElement.classList.remove('hidden');
         updateCountdownText(timeLeft);
 
-        countdownInterval = setInterval(() => {
+        state.countdownInterval = setInterval(() => {
             timeLeft--;
             updateCountdownText(timeLeft);
 
             if (timeLeft <= 0) {
-                clearInterval(countdownInterval);
-                countdownElement.classList.add('hidden');
-                externalLinkButton.classList.remove('hidden');
+                clearInterval(state.countdownInterval);
+                dom.countdownElement.classList.add('hidden');
+                dom.externalLinkButton.classList.remove('hidden');
             }
         }, 1000);
     }
 
     function updateCountdownText(seconds) {
         const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        const timeString = `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-        countdownElement.textContent = `Link disponible en: ${timeString}`;
+        const remaining = seconds % 60;
+        dom.countdownElement.textContent = `Link disponible en: ${minutes}:${remaining.toString().padStart(2, '0')}`;
     }
 
-    function getMovableTiles(emptyIndex) {
-        const movable = [];
-        const { row, col } = getRowCol(emptyIndex);
-        if (row > 0) movable.push(emptyIndex - GRID_SIZE);
-        if (row < GRID_SIZE - 1) movable.push(emptyIndex + GRID_SIZE);
-        if (col > 0) movable.push(emptyIndex - 1);
-        if (col < GRID_SIZE - 1) movable.push(emptyIndex + 1);
-        return movable;
-    }
+    // ── CONFETTI ────────────────────────────────────────────────────
+    const CONFETTI_COLORS = [
+        '#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5',
+        '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4CAF50',
+        '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#FF5722',
+    ];
 
     function generateConfetti() {
         clearConfetti();
-        const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4CAF50', '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#FF5722'];
-
-        const containerWidth = container.offsetWidth;
-        const containerHeight = container.offsetHeight;
+        const containerWidth = dom.container.offsetWidth;
+        const containerHeight = dom.container.offsetHeight;
 
         for (let i = 0; i < 50; i++) {
             const piece = document.createElement('div');
             piece.classList.add('confetti-piece');
-            piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            piece.style.backgroundColor = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
 
             const startX = Math.random() * containerWidth * 2 - containerWidth / 2;
             const startY = -Math.random() * 50;
@@ -422,238 +451,255 @@ document.addEventListener('DOMContentLoaded', () => {
             piece.style.setProperty('--end-y', `${endY}px`);
 
             piece.style.animationDelay = `${Math.random() * 0.5}s`;
-            piece.style.animationDuration = `${2 + Math.random() * 1}s`;
+            piece.style.animationDuration = `${2 + Math.random()}s`;
 
-            confettiContainer.appendChild(piece);
+            dom.confettiContainer.appendChild(piece);
         }
     }
 
     function clearConfetti() {
-        confettiContainer.innerHTML = '';
+        dom.confettiContainer.innerHTML = '';
     }
 
-    function isTouchInside(event, element) {
-        if (!event.changedTouches || event.changedTouches.length === 0) {
-            return false;
-        }
-        const touch = event.changedTouches[0];
-        const rect = element.getBoundingClientRect();
+    // ── EVENT HANDLERS ──────────────────────────────────────────────
 
-        return (
-            touch.clientX >= rect.left &&
-            touch.clientX <= rect.right &&
-            touch.clientY >= rect.top &&
-            touch.clientY <= rect.bottom
-        );
-    }
-
-    container.addEventListener('touchstart', (event) => {
-        if (!isMobileDevice()) return;
-        if (!isGameActive) return;
+    // Touch: Swipe to move tiles
+    function onContainerTouchStart(event) {
+        if (!isMobileDevice() || !state.isGameActive) return;
         if (event.changedTouches.length > 0) {
-            touchStartX = event.changedTouches[0].clientX;
-            touchStartY = event.changedTouches[0].clientY;
+            state.touchStartX = event.changedTouches[0].clientX;
+            state.touchStartY = event.changedTouches[0].clientY;
         }
-    }, { passive: false });
+    }
 
-    container.addEventListener('touchend', (event) => {
-        if (!isMobileDevice()) return;
-        if (!isGameActive || event.changedTouches.length === 0) return;
+    function onContainerTouchEnd(event) {
+        if (!isMobileDevice() || !state.isGameActive || event.changedTouches.length === 0) return;
 
         const touchEndX = event.changedTouches[0].clientX;
         const touchEndY = event.changedTouches[0].clientY;
+        const deltaX = touchEndX - state.touchStartX;
+        const deltaY = touchEndY - state.touchStartY;
 
-        const deltaX = touchEndX - touchStartX;
-        const deltaY = touchEndY - touchStartY;
-
-        if (Math.abs(deltaX) < SWIPE_THRESHOLD && Math.abs(deltaY) < SWIPE_THRESHOLD) {
-            return;
-        }
+        if (Math.abs(deltaX) < CONFIG.SWIPE_THRESHOLD && Math.abs(deltaY) < CONFIG.SWIPE_THRESHOLD) return;
 
         const absX = Math.abs(deltaX);
         const absY = Math.abs(deltaY);
+        const rect = dom.container.getBoundingClientRect();
+        const startRelX = state.touchStartX - rect.left;
+        const startRelY = state.touchStartY - rect.top;
 
-        const rect = container.getBoundingClientRect();
-        const startRelX = touchStartX - rect.left;
-        const startRelY = touchStartY - rect.top;
-
-        // Ensure start touch was inside container
         if (startRelX < 0 || startRelX > rect.width || startRelY < 0 || startRelY > rect.height) return;
 
-        const dynamicTileSize = rect.width / GRID_SIZE;
-
+        const dynamicTileSize = rect.width / CONFIG.GRID_SIZE;
         const col = Math.floor(startRelX / dynamicTileSize);
         const row = Math.floor(startRelY / dynamicTileSize);
-        const index = row * GRID_SIZE + col;
+        const index = row * CONFIG.GRID_SIZE + col;
 
-        if (index < 0 || index >= TILE_COUNT) return;
+        if (index < 0 || index >= CONFIG.TILE_COUNT) return;
 
-        const emptyIndex = tiles.indexOf(0);
+        const emptyIndex = state.tiles.indexOf(0);
         const { row: emptyRow, col: emptyCol } = getRowCol(emptyIndex);
         const { row: tileRow, col: tileCol } = getRowCol(index);
 
         const dRow = emptyRow - tileRow;
         const dCol = emptyCol - tileCol;
 
-        // Check if move is valid (adjacent)
-        const isAdjacent = (Math.abs(dRow) + Math.abs(dCol)) === 1;
-        if (!isAdjacent) return;
+        if ((Math.abs(dRow) + Math.abs(dCol)) !== 1) return;
 
-        // Check if swipe direction matches move direction
         let matches = false;
         if (absX > absY) {
-            // Horizontal swipe
-            if (deltaX > 0 && dCol > 0) matches = true; // Swipe Right, Empty is Right
-            if (deltaX < 0 && dCol < 0) matches = true; // Swipe Left, Empty is Left
+            if (deltaX > 0 && dCol > 0) matches = true;
+            if (deltaX < 0 && dCol < 0) matches = true;
         } else {
-            // Vertical swipe
-            if (deltaY > 0 && dRow > 0) matches = true; // Swipe Down, Empty is Down
-            if (deltaY < 0 && dRow < 0) matches = true; // Swipe Up, Empty is Up
+            if (deltaY > 0 && dRow > 0) matches = true;
+            if (deltaY < 0 && dRow < 0) matches = true;
         }
 
         if (matches) {
-            event.preventDefault(); // Prevent click
+            event.preventDefault();
             moveTile(index);
         }
-    });
+    }
 
-    container.addEventListener('click', (event) => {
-        if (!isGameActive) return;
-        const rect = container.getBoundingClientRect();
+    // Click: Desktop tile movement
+    function onContainerClick(event) {
+        if (!state.isGameActive) return;
+        const rect = dom.container.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
-        const dynamicTileSize = rect.width / GRID_SIZE;
+        const dynamicTileSize = rect.width / CONFIG.GRID_SIZE;
         const col = Math.floor(x / dynamicTileSize);
         const row = Math.floor(y / dynamicTileSize);
-        const clickedIndex = row * GRID_SIZE + col;
+        const clickedIndex = row * CONFIG.GRID_SIZE + col;
         moveTile(clickedIndex);
-    });
+    }
 
-    shuffleButton.addEventListener('click', () => {
-        if (!isGameActive) {
+    // Shuffle button: click
+    function onShuffleClick() {
+        if (!state.isGameActive) {
             shuffleAndStart();
         }
-    });
+    }
 
-    shuffleButton.addEventListener('mousedown', () => {
-        if (isGameActive) {
-            container.classList.add('show-preview');
-            previewPressStartTime = Date.now();
-            hintElement.classList.remove('visible');
-            clearTimeout(hintTimeout);
+    // Preview: mouse hold
+    function onShuffleMouseDown() {
+        if (state.isGameActive) {
+            dom.container.classList.add('show-preview');
+            state.previewPressStartTime = Date.now();
+            dom.hintElement.classList.remove('visible');
+            clearTimeout(state.hintTimeout);
         }
-    });
+    }
 
-    shuffleButton.addEventListener('mouseup', () => {
-        if (isGameActive) {
-            container.classList.remove('show-preview');
-            const duration = Date.now() - previewPressStartTime;
-            if (duration < 100) {
-                hintElement.classList.add('visible');
-                clearTimeout(hintTimeout);
-                hintTimeout = setTimeout(() => {
-                    hintElement.classList.remove('visible');
-                }, 1000);
+    function onShuffleMouseUp() {
+        if (state.isGameActive) {
+            dom.container.classList.remove('show-preview');
+            const duration = Date.now() - state.previewPressStartTime;
+            if (duration < CONFIG.SHORT_PRESS_THRESHOLD_MS) {
+                showHintBriefly();
             }
         }
-    });
+    }
 
-    shuffleButton.addEventListener('mouseleave', () => {
-        if (isGameActive) {
-            container.classList.remove('show-preview');
+    function onShuffleMouseLeave() {
+        if (state.isGameActive) {
+            dom.container.classList.remove('show-preview');
         }
-    });
+    }
 
-    shuffleButton.addEventListener('touchstart', (event) => {
+    // Preview: touch hold
+    function onShuffleTouchStart(event) {
         event.preventDefault();
-        shuffleButton.classList.add('button-active');
-        if (isGameActive) {
-            container.classList.add('show-preview');
-            previewPressStartTime = Date.now();
-            hintElement.classList.remove('visible');
-            clearTimeout(hintTimeout);
+        dom.shuffleButton.classList.add('button-active');
+        if (state.isGameActive) {
+            dom.container.classList.add('show-preview');
+            state.previewPressStartTime = Date.now();
+            dom.hintElement.classList.remove('visible');
+            clearTimeout(state.hintTimeout);
         }
-    }, { passive: false });
+    }
 
-    shuffleButton.addEventListener('touchend', (event) => {
-        shuffleButton.classList.remove('button-active');
-        const touchWasInside = isTouchInside(event, shuffleButton);
-        if (isGameActive) {
-            container.classList.remove('show-preview');
-            const duration = Date.now() - previewPressStartTime;
-            if (duration < 100) {
-                hintElement.classList.add('visible');
-                clearTimeout(hintTimeout);
-                hintTimeout = setTimeout(() => {
-                    hintElement.classList.remove('visible');
-                }, 1000);
+    function onShuffleTouchEnd(event) {
+        dom.shuffleButton.classList.remove('button-active');
+        const touchWasInside = isTouchInside(event, dom.shuffleButton);
+        if (state.isGameActive) {
+            dom.container.classList.remove('show-preview');
+            const duration = Date.now() - state.previewPressStartTime;
+            if (duration < CONFIG.SHORT_PRESS_THRESHOLD_MS) {
+                showHintBriefly();
             }
         } else if (touchWasInside) {
             shuffleAndStart();
         }
-    });
-
-    shuffleButton.addEventListener('touchcancel', (event) => {
-        shuffleButton.classList.remove('button-active');
-        if (isGameActive) {
-            container.classList.remove('show-preview');
-        }
-    });
-
-    window.addEventListener('pageshow', () => {
-        shuffleButton.blur();
-        externalLinkButton.blur();
-        shuffleButton.classList.remove('button-active');
-        externalLinkButton.classList.remove('button-active');
-    });
-
-    externalLinkButton.addEventListener('touchstart', (event) => {
-        event.preventDefault();
-        externalLinkButton.classList.add('button-active');
-    }, { passive: false });
-
-    externalLinkButton.addEventListener('touchend', (event) => {
-        event.preventDefault();
-        externalLinkButton.classList.remove('button-active');
-        const touchWasInside = isTouchInside(event, externalLinkButton);
-        if (touchWasInside) {
-            const url = externalLinkButton.href;
-            setTimeout(() => {
-                window.location.href = url;
-            }, 100);
-        }
-    });
-
-    externalLinkButton.addEventListener('touchcancel', (event) => {
-        event.preventDefault();
-        externalLinkButton.classList.remove('button-active');
-    });
-
-    createPieces();
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const imageId = urlParams.get('id');
-
-    let winMessageText = '';
-    const linkParaSerieD = "https://borish127.github.io/invitacion-boda/?grupo=damas";
-    const linkParaSerieC = "https://borish127.github.io/invitacion-boda/?grupo=caballeros";
-    const linkParaDefault = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-
-    const textoParaSerieD = "";
-    const textoParaSerieC = "Felicitaciones!! Si llegaste hasta aquí es porque has sido invitado a ser Caballero de Honor de Boris.\n Visita el link para ver la invitación completa.";
-    const textoParaDefault = "¡Juego Completado!";
-
-    if (imageId && imageId.startsWith('c')) {
-        externalLinkButton.href = linkParaSerieC;
-        winMessageText = textoParaSerieC;
-    } else if (imageId && imageMap[imageId] && imageId !== 'default') {
-        externalLinkButton.href = linkParaSerieD;
-        winMessageText = textoParaSerieD;
-    } else {
-        externalLinkButton.href = linkParaDefault;
-        winMessageText = textoParaDefault;
     }
 
-    const initialImageUrl = getImageUrlFromUrl();
-    setPuzzleImage(initialImageUrl);
-});
+    function onShuffleTouchCancel() {
+        dom.shuffleButton.classList.remove('button-active');
+        if (state.isGameActive) {
+            dom.container.classList.remove('show-preview');
+        }
+    }
+
+    function showHintBriefly() {
+        dom.hintElement.classList.add('visible');
+        clearTimeout(state.hintTimeout);
+        state.hintTimeout = setTimeout(() => {
+            dom.hintElement.classList.remove('visible');
+        }, CONFIG.HINT_DISPLAY_MS);
+    }
+
+    // External link button: touch
+    function onExternalTouchStart(event) {
+        event.preventDefault();
+        dom.externalLinkButton.classList.add('button-active');
+    }
+
+    function onExternalTouchEnd(event) {
+        event.preventDefault();
+        dom.externalLinkButton.classList.remove('button-active');
+        if (isTouchInside(event, dom.externalLinkButton)) {
+            const url = dom.externalLinkButton.href;
+            setTimeout(() => { window.location.href = url; }, 100);
+        }
+    }
+
+    function onExternalTouchCancel(event) {
+        event.preventDefault();
+        dom.externalLinkButton.classList.remove('button-active');
+    }
+
+    // Page show: reset button states
+    function onPageShow() {
+        dom.shuffleButton.blur();
+        dom.externalLinkButton.blur();
+        dom.shuffleButton.classList.remove('button-active');
+        dom.externalLinkButton.classList.remove('button-active');
+    }
+
+    // ── INITIALIZATION ──────────────────────────────────────────────
+    function init() {
+        // Cache DOM references
+        dom.container = document.getElementById('puzzle-container');
+        dom.message = document.getElementById('message');
+        dom.shuffleButton = document.getElementById('shuffle-button');
+        dom.externalLinkButton = document.getElementById('external-link-button');
+        dom.countdownElement = document.getElementById('countdown-timer');
+        dom.confettiContainer = dom.container.querySelector('.confetti-container');
+        dom.gameContainer = document.querySelector('.game-container');
+        dom.hintElement = document.getElementById('preview-hint');
+
+        // Determine series from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        state.imageId = urlParams.get('id');
+        state.isSeriesD = !!(state.imageId && IMAGE_MAP[state.imageId] && state.imageId !== 'default' && !state.imageId.startsWith('c'));
+        state.isSeriesC = !!(state.imageId && state.imageId.startsWith('c'));
+
+        // Determine win text & link
+        const linkParaSerieD = 'https://borish127.github.io/invitacion-boda/?grupo=damas';
+        const linkParaSerieC = 'https://borish127.github.io/invitacion-boda/?grupo=caballeros';
+        const linkParaDefault = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+        const textoParaSerieD = '';
+        const textoParaSerieC = 'Felicitaciones!! Si llegaste hasta aquí es porque has sido invitado a ser Caballero de Honor de Boris.\n Visita el link para ver la invitación completa.';
+        const textoParaDefault = '¡Juego Completado!';
+
+        if (state.isSeriesC) {
+            dom.externalLinkButton.href = linkParaSerieC;
+            state.winMessageText = textoParaSerieC;
+        } else if (state.isSeriesD) {
+            dom.externalLinkButton.href = linkParaSerieD;
+            state.winMessageText = textoParaSerieD;
+        } else {
+            dom.externalLinkButton.href = linkParaDefault;
+            state.winMessageText = textoParaDefault;
+        }
+
+        // Create pieces and set image
+        createPieces();
+        const initialImageUrl = getImageUrlFromParams();
+        setPuzzleImage(initialImageUrl);
+
+        // Bind events
+        dom.container.addEventListener('touchstart', onContainerTouchStart, { passive: false });
+        dom.container.addEventListener('touchend', onContainerTouchEnd);
+        dom.container.addEventListener('click', onContainerClick);
+
+        dom.shuffleButton.addEventListener('click', onShuffleClick);
+        dom.shuffleButton.addEventListener('mousedown', onShuffleMouseDown);
+        dom.shuffleButton.addEventListener('mouseup', onShuffleMouseUp);
+        dom.shuffleButton.addEventListener('mouseleave', onShuffleMouseLeave);
+        dom.shuffleButton.addEventListener('touchstart', onShuffleTouchStart, { passive: false });
+        dom.shuffleButton.addEventListener('touchend', onShuffleTouchEnd);
+        dom.shuffleButton.addEventListener('touchcancel', onShuffleTouchCancel);
+
+        dom.externalLinkButton.addEventListener('touchstart', onExternalTouchStart, { passive: false });
+        dom.externalLinkButton.addEventListener('touchend', onExternalTouchEnd);
+        dom.externalLinkButton.addEventListener('touchcancel', onExternalTouchCancel);
+
+        window.addEventListener('pageshow', onPageShow);
+    }
+
+    return { init };
+})();
+
+document.addEventListener('DOMContentLoaded', PuzzleGame.init);
