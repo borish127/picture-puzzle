@@ -655,8 +655,8 @@ const PuzzleGame = (() => {
         state.isSeriesC = !!(state.imageId && state.imageId.startsWith('c'));
 
         // Determine win text & link
-        const linkParaSerieD = 'https://borish127.github.io/invitacion-boda/?grupo=damas';
-        const linkParaSerieC = 'https://borish127.github.io/invitacion-boda/?grupo=caballeros';
+        const linkParaSerieD = 'https://kelly-boris-boda.borish127.com/?grupo=damas';
+        const linkParaSerieC = 'https://kelly-boris-boda.borish127.com/?grupo=caballeros';
         const linkParaDefault = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 
         const textoParaSerieD = '';
