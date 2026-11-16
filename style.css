@@ -1,6 +1,10 @@
 /* ===================================================================
    Picture Puzzle – Material 3 Expressive Design System
+   Modern CSS architecture: cascade layers, design tokens, logical
+   properties, compositor motion, reduced-motion & forced-colors.
    =================================================================== */
+
+@layer reset, base, components, utilities;
 
 /* --- Font --- */
 @font-face {
@@ -12,18 +16,37 @@
 
 /* --- M3 Design Tokens --- */
 :root {
+    color-scheme: dark;
+
+    --bg-canvas: #0a0a0f;
+    --bg-backdrop-tint: rgba(0, 0, 0, 0.55);
+
     --md-radius-xl: 28px;
     --md-radius-lg: 24px;
     --md-radius-md: 16px;
     --md-radius-sm: 12px;
 
     --md-surface: rgba(30, 30, 40, 0.60);
-    --md-surface-high: rgba(40, 40, 55, 0.72);
-    --md-surface-border: rgba(255, 255, 255, 0.08);
+    --md-surface-high: rgba(40, 40, 55, 0.85);
+    --md-surface-border: rgba(255, 255, 255, 0.12);
     --md-surface-blur: blur(24px);
 
     --md-on-surface: #E6E1E5;
     --md-on-surface-variant: rgba(230, 225, 229, 0.7);
+
+    /* Accessible button & accent tokens (>= 4.5:1 text contrast) */
+    --shuffle-bg: #005fcc;
+    --shuffle-fg: #ffffff;
+    --link-bg: #196f2d;
+    --link-bg-hover: #145a24;
+    --link-fg: #ffffff;
+    --accent-highlight: #ffeb3b;
+    --focus-ring: #ffffff;
+    --tile-border: rgba(255, 255, 255, 0.25);
+    --solved-border: rgba(255, 255, 255, 0.6);
+
+    /* Interactive target sizing (WCAG 2.5.8 / 2.5.5) */
+    --target-size: 24px;
 
     /* M3 Standard easing for smooth glide */
     --md-easing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -37,494 +60,640 @@
     --md-elevation-3: 0 4px 12px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.25);
 }
 
-/* --- Base --- */
-*,
-*::before,
-*::after {
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-}
-
-body {
-    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    text-align: center;
-    background-color: #0a0a0f;
-    color: var(--md-on-surface);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    height: 100dvh;
-    margin: 0;
-    overflow: hidden;
-    padding-bottom: env(safe-area-inset-bottom);
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
-    font-size: min(3.5vmin, 18px);
-}
-
-/* --- Background Blur --- */
-#background-blur {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image: var(--puzzle-image);
-    background-size: cover;
-    background-position: center;
-    background-color: rgba(0, 0, 0, 0.55);
-    background-blend-mode: multiply;
-    filter: blur(20px) saturate(1.2);
-    transform: scale(1.15);
-    z-index: -1;
-}
-
-/* --- Title --- */
-h1 {
-    font-family: 'Nunito', sans-serif;
-    font-weight: 800;
-    color: #fff;
-    font-size: min(5.5vmin, 32px);
-    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
-    margin: min(2vmin, 15px) 0;
-    position: relative;
-    top: min(4vmin, 120px);
-    letter-spacing: 0.02em;
-}
-
-/* --- Game Container --- */
-.game-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-evenly;
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    padding: min(2vmin, 20px);
-}
-
-/* --- Puzzle Container --- */
-#puzzle-container {
-    width: min(85vmin, 450px);
-    max-width: min(85vmin, 450px);
-    max-height: min(85vmin, 450px);
-    height: auto;
-    aspect-ratio: 1 / 1;
-    margin: min(1vmin, 10px) auto;
-    position: relative;
-    border-radius: var(--md-radius-xl);
-    box-shadow: var(--md-elevation-3);
-    transition: border-color var(--md-duration-long) var(--md-easing);
-    background-color: #0a0a0f;
-    overflow: hidden;
-    /* Clips tiles during corner transitions */
-}
-
-#puzzle-container::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: var(--md-radius-xl);
-    border: 1.5px solid transparent;
-    pointer-events: none;
-    z-index: 10;
-    transition: border-color var(--md-duration-long) var(--md-easing);
-    box-sizing: border-box;
-}
-
-/* --- Preview Image --- */
-#preview-image {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image: var(--puzzle-image);
-    background-size: 100% 100%;
-    opacity: 0;
-    z-index: 2;
-    transition: opacity var(--md-duration-short) ease-in-out;
-    pointer-events: none;
-    border-radius: var(--md-radius-xl);
-    box-sizing: border-box;
-}
-
-#puzzle-container.show-preview #preview-image {
-    opacity: 1;
-}
-
-#puzzle-container.show-preview .tile {
-    z-index: 0;
-    pointer-events: none;
-}
-
-/* --- Tiles ---
-   The "smooth glide" fix:
-   - transition includes border-radius so corner changes animate with the slide
-   - overflow:hidden on #puzzle-container clips any tile that overshoots during
-     the radius transition, preventing the "corner clipping" glitch
-   - No scale/zoom effects — pure top/left glide only
-*/
-.tile {
-    width: 25%;
-    height: 25%;
-    position: absolute;
-    background-image: var(--puzzle-image);
-    background-size: 400% 400%;
-    cursor: pointer;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    box-sizing: border-box;
-    transition:
-        top var(--md-duration-short) var(--md-easing),
-        left var(--md-duration-short) var(--md-easing),
-        border-radius var(--md-duration-short) var(--md-easing),
-        border-color var(--md-duration-long) var(--md-easing),
-        opacity var(--md-duration-short) ease-in-out;
-    will-change: top, left;
-    border-radius: 0;
-    -webkit-tap-highlight-color: transparent;
-}
-
-/* Corner radii for edge tiles — matches container's 28px */
-.tile.top-left-corner {
-    border-top-left-radius: var(--md-radius-xl);
-}
-
-.tile.top-right-corner {
-    border-top-right-radius: var(--md-radius-xl);
-}
-
-.tile.bottom-left-corner {
-    border-bottom-left-radius: var(--md-radius-xl);
-}
-
-.tile.bottom-right-corner {
-    border-bottom-right-radius: var(--md-radius-xl);
-}
-
-/* --- Solved State --- */
-#puzzle-container.solved .tile {
-    border-color: transparent;
-    transition: opacity var(--md-duration-short) ease, border-color var(--md-duration-short) ease;
-    pointer-events: none;
-}
-
-#puzzle-container.solved {
-    overflow: hidden;
-}
-
-#puzzle-container.solved::after {
-    border-color: rgba(255, 255, 255, 0.6);
-}
-
-@keyframes winAnimationScale {
-    0% {
-        transform: scale(1);
-    }
-
-    50% {
-        transform: scale(1.05);
-    }
-
-    100% {
-        transform: scale(1);
+@media (pointer: coarse) {
+    :root {
+        --target-size: 44px;
     }
 }
 
-#puzzle-container.solved #preview-image {
-    opacity: 1;
-    animation: winAnimationScale 0.8s ease-out forwards;
-    transition: opacity var(--md-duration-short) ease;
-}
-
-/* --- Message --- */
-#message {
-    font-family: 'Nunito', sans-serif;
-    font-weight: 600;
-    margin-top: min(2vmin, 15px);
-    font-size: min(4vmin, 18px);
-    color: var(--md-on-surface);
-    min-height: min(6vmin, 30px);
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
-    white-space: pre-line;
-    line-height: 1.5;
-}
-
-.message-highlight {
-    font-size: 1.3em !important;
-    font-weight: 700;
-    background: var(--md-surface-high);
-    backdrop-filter: var(--md-surface-blur);
-    -webkit-backdrop-filter: var(--md-surface-blur);
-    border: 2px solid #ffeb3b;
-    padding: 18px 22px;
-    border-radius: var(--md-radius-lg);
-    box-shadow: 0 0 20px rgba(255, 235, 59, 0.4), var(--md-elevation-2);
-    animation: highlightPulse 2.5s ease-in-out infinite;
-    max-width: 90%;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-@keyframes highlightPulse {
-    0% {
-        transform: scale(1);
-        box-shadow: 0 0 15px rgba(255, 235, 59, 0.4), var(--md-elevation-2);
+@layer reset {
+    html,
+    body,
+    main,
+    div,
+    p,
+    h1,
+    button,
+    a {
+        box-sizing: border-box;
     }
 
-    50% {
-        transform: scale(1.015);
-        box-shadow: 0 0 30px rgba(255, 235, 59, 0.65), var(--md-elevation-2);
-    }
-
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 15px rgba(255, 235, 59, 0.4), var(--md-elevation-2);
+    button,
+    a {
+        -webkit-tap-highlight-color: transparent;
     }
 }
 
-/* --- Countdown Timer --- */
-#countdown-timer {
-    font-family: 'Nunito', sans-serif;
-    font-weight: 700;
-    margin-top: min(1.5vmin, 10px);
-    font-size: min(4.5vmin, 20px);
-    color: #ffeb3b;
-    text-shadow: 0 1px 8px rgba(255, 235, 59, 0.3);
-    min-height: min(5.5vmin, 25px);
-}
-
-/* --- Button Container --- */
-#button-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: min(3vmin, 15px);
-    min-height: min(10vmin, 50px);
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    width: 100%;
-    margin-top: min(2vmin, 15px);
-}
-
-/* --- Buttons (M3 Expressive Tonal) --- */
-.button,
-#shuffle-button,
-#external-link-button {
-    font-family: 'Nunito', sans-serif;
-    font-weight: 700;
-    padding: min(2.8vmin, 14px) min(5.5vmin, 28px);
-    font-size: min(4vmin, 16px);
-    cursor: pointer;
-    border-radius: var(--md-radius-xl);
-    border: none;
-    color: white;
-    box-shadow: var(--md-elevation-1);
-    transition:
-        filter var(--md-duration-short) var(--md-easing),
-        transform var(--md-duration-short) var(--md-easing),
-        box-shadow var(--md-duration-short) var(--md-easing),
-        opacity var(--md-duration-medium) var(--md-easing),
-        visibility var(--md-duration-medium) var(--md-easing);
-    text-decoration: none;
-    user-select: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    letter-spacing: 0.03em;
-    will-change: transform, filter;
-}
-
-#shuffle-button {
-    background-color: #007bff;
-}
-
-#shuffle-button:hover,
-#shuffle-button.button-active {
-    filter: brightness(0.88);
-    transform: scale(0.97);
-    box-shadow: var(--md-elevation-2);
-}
-
-#external-link-button {
-    background-color: #28a745;
-}
-
-#external-link-button:hover,
-#external-link-button.button-active {
-    background-color: #218838;
-    filter: brightness(0.92);
-    transform: scale(0.97);
-    box-shadow: var(--md-elevation-2);
-}
-
-/* Focus-visible for keyboard accessibility */
-#shuffle-button:focus-visible,
-#external-link-button:focus-visible {
-    outline: 3px solid rgba(255, 255, 255, 0.6);
-    outline-offset: 3px;
-}
-
-/* --- Hidden Utility --- */
-.hidden {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    position: absolute;
-}
-
-/* --- Confetti --- */
-.confetti-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 3;
-    overflow: hidden;
-    border-radius: var(--md-radius-xl);
-}
-
-.confetti-piece {
-    position: absolute;
-    width: min(1.5vmin, 8px);
-    height: min(1.5vmin, 8px);
-    background-color: transparent;
-    border-radius: 50%;
-    opacity: 0;
-    animation: fallConfetti 3s ease-in forwards;
-    transform: translate(-50%, -50%) rotateZ(0deg);
-    will-change: transform, opacity;
-}
-
-@keyframes fallConfetti {
-    0% {
-        opacity: 0;
-        transform: translate(var(--start-x), var(--start-y)) rotateZ(0deg) scale(0.5);
-    }
-
-    10% {
-        opacity: 1;
-    }
-
-    100% {
-        opacity: 0;
-        transform: translate(var(--end-x), var(--end-y)) rotateZ(720deg) scale(1);
-    }
-}
-
-/* --- Layout: Solved Desktop Grid ---
-   Horizontal balance: puzzle + message share the same central axis (equator).
-   Single-row grid with align-items: center keeps both vertically centered.
-*/
-@media (max-width: 767px) {
-    .game-container.layout-solved #puzzle-container {
-        max-width: 80vmin;
-        margin-bottom: 0;
-    }
-}
-
-@media (min-width: 768px) {
-    .game-container.layout-solved {
-        display: grid;
-        grid-template-columns: auto minmax(min(30vmin, 300px), min(40vmin, 400px));
-        grid-template-rows: 1fr auto;
-        grid-template-areas:
-            "puzzle message"
-            "buttons buttons";
-        gap: min(3vmin, 20px);
+@layer base {
+    body {
+        font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: clamp(0.95rem, 0.7rem + 1vmin, 1.125rem);
+        font-size-adjust: from-font;
+        line-height: 1.5;
+        text-align: center;
+        background-color: var(--bg-canvas);
+        color: var(--md-on-surface);
+        display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
-    }
-
-    .game-container.layout-solved #puzzle-container {
-        grid-area: puzzle;
+        /* Fixed small viewport keeps mobile browser URL bar show/hide from resizing layout */
+        block-size: 100vh;
+        block-size: 100svh;
         margin: 0;
-        align-self: center;
+        overflow: hidden;
+        padding-block: env(safe-area-inset-top, 0px) env(safe-area-inset-bottom, 0px);
+        padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
     }
 
-    .game-container.layout-solved #message {
-        grid-area: message;
-        margin-top: 0;
-        text-align: left;
-        align-self: center;
+    .page-main {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-evenly;
+        inline-size: 100%;
+        block-size: 100%;
+        padding-block-start: clamp(0.5rem, 2svh, 1.5rem);
     }
 
-    .game-container.layout-solved #button-container {
-        grid-area: buttons;
-        justify-content: center;
-        margin-top: 0;
+    h1 {
+        font-family: 'Nunito', sans-serif;
+        font-weight: 800;
+        color: #ffffff;
+        font-size: clamp(1.35rem, 0.9rem + 2.5vmin, 2rem);
+        line-height: 1.2;
+        text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+        text-wrap: balance;
+        margin-block: clamp(0.25rem, 1svh, 0.75rem);
+        margin-inline: 1rem;
+        letter-spacing: 0.02em;
     }
 }
 
-/* --- Fade-in Animation --- */
-@keyframes fadeIn {
-    from {
+@layer components {
+    /* --- Background Blur --- */
+    #background-blur {
+        position: fixed;
+        inset: 0;
+        background-image: var(--puzzle-image);
+        background-size: cover;
+        background-position: center;
+        background-color: var(--bg-backdrop-tint);
+        background-blend-mode: multiply;
+        filter: blur(20px) saturate(1.2);
+        scale: 1.15;
+        z-index: -1;
+    }
+
+    /* --- Game Container --- */
+    .game-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-evenly;
+        inline-size: 100%;
+        flex: 1 1 auto;
+        min-block-size: 0;
+        padding: clamp(0.5rem, 1.5vmin, 1.25rem);
+    }
+
+    /* --- Puzzle Container --- */
+    #puzzle-container {
+        inline-size: min(85vmin, 58svh, 450px);
+        max-inline-size: min(85vmin, 58svh, 450px);
+        max-block-size: min(85vmin, 58svh, 450px);
+        block-size: auto;
+        aspect-ratio: 1 / 1;
+        margin-block: clamp(0.25rem, 1vmin, 0.625rem);
+        margin-inline: auto;
+        position: relative;
+        border-radius: var(--md-radius-xl);
+        box-shadow: var(--md-elevation-3);
+        transition: border-color var(--md-duration-long) var(--md-easing);
+        background-color: var(--bg-canvas);
+        overflow: hidden;
+        touch-action: none;
+    }
+
+    #puzzle-container::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: var(--md-radius-xl);
+        border: 1.5px solid transparent;
+        pointer-events: none;
+        z-index: 10;
+        transition: border-color var(--md-duration-long) var(--md-easing);
+    }
+
+    /* --- Preview Image --- */
+    #preview-image {
+        position: absolute;
+        inset: 0;
+        background-image: var(--puzzle-image);
+        background-size: 100% 100%;
         opacity: 0;
-        transform: translateY(6px);
+        z-index: 2;
+        transition: opacity var(--md-duration-short) ease-in-out;
+        pointer-events: none;
+        border-radius: var(--md-radius-xl);
     }
 
-    to {
+    #puzzle-container.show-preview #preview-image {
         opacity: 1;
-        transform: translateY(0);
+    }
+
+    #puzzle-container.show-preview .tile {
+        z-index: 0;
+        pointer-events: none;
+    }
+
+    /* --- Tiles (Compositor-only translate) --- */
+    .tile {
+        appearance: none;
+        padding: 0;
+        margin: 0;
+        font: inherit;
+        color: inherit;
+        background-color: transparent;
+        inline-size: 25%;
+        block-size: 25%;
+        position: absolute;
+        inset-block-start: 0;
+        inset-inline-start: 0;
+        translate: calc(var(--col, 0) * 100%) calc(var(--row, 0) * 100%);
+        background-image: var(--puzzle-image);
+        background-size: 400% 400%;
+        cursor: pointer;
+        border: 1px solid var(--tile-border);
+        border-radius: 0;
+        transition:
+            translate var(--md-duration-short) var(--md-easing),
+            border-radius var(--md-duration-short) var(--md-easing),
+            border-color var(--md-duration-long) var(--md-easing),
+            opacity var(--md-duration-short) ease-in-out;
+    }
+
+    .tile:disabled {
+        cursor: default;
+        opacity: 1;
+    }
+
+    .tile:focus-visible {
+        outline: 3px solid var(--focus-ring);
+        outline-offset: -4px;
+        box-shadow: inset 0 0 0 2px var(--bg-canvas);
+        z-index: 5;
+    }
+
+    /* Corner radii for edge tiles — matches container's 28px */
+    .tile.top-left-corner {
+        border-top-left-radius: var(--md-radius-xl);
+    }
+
+    .tile.top-right-corner {
+        border-top-right-radius: var(--md-radius-xl);
+    }
+
+    .tile.bottom-left-corner {
+        border-bottom-left-radius: var(--md-radius-xl);
+    }
+
+    .tile.bottom-right-corner {
+        border-bottom-right-radius: var(--md-radius-xl);
+    }
+
+    /* --- Solved State --- */
+    #puzzle-container.solved .tile {
+        border-color: transparent;
+        transition: opacity var(--md-duration-short) ease, border-color var(--md-duration-short) ease;
+        pointer-events: none;
+    }
+
+    #puzzle-container.solved {
+        overflow: hidden;
+    }
+
+    #puzzle-container.solved::after {
+        border-color: var(--solved-border);
+    }
+
+    @keyframes winAnimationScale {
+        0% {
+            scale: 1;
+        }
+
+        50% {
+            scale: 1.05;
+        }
+
+        100% {
+            scale: 1;
+        }
+    }
+
+    #puzzle-container.solved #preview-image {
+        opacity: 1;
+        transition: opacity var(--md-duration-short) ease;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        #puzzle-container.solved #preview-image {
+            animation: winAnimationScale 0.8s ease-out forwards;
+        }
+    }
+
+    /* --- Message --- */
+    #message {
+        font-family: 'Nunito', sans-serif;
+        font-weight: 600;
+        margin-block: clamp(0.5rem, 1.5vmin, 0.9375rem) 0;
+        font-size: clamp(0.95rem, 0.75rem + 1.2vmin, 1.125rem);
+        color: var(--md-on-surface);
+        min-block-size: clamp(1.5rem, 4vmin, 1.875rem);
+        max-inline-size: 60ch;
+        text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+        white-space: pre-line;
+        text-wrap: pretty;
+        overflow-wrap: break-word;
+        line-height: 1.5;
+        opacity: 1;
+        transition: opacity var(--md-duration-long) ease-in-out;
+    }
+
+    #message.is-pending {
+        opacity: 0;
+    }
+
+    #message.message-highlight {
+        font-size: clamp(1.1rem, 0.85rem + 1.4vmin, 1.4rem);
+        font-weight: 700;
+        background: var(--md-surface-high);
+        backdrop-filter: var(--md-surface-blur);
+        -webkit-backdrop-filter: var(--md-surface-blur);
+        border: 2px solid var(--accent-highlight);
+        padding-block: 1rem;
+        padding-inline: 1.375rem;
+        border-radius: var(--md-radius-lg);
+        box-shadow: 0 0 20px rgba(255, 235, 59, 0.35), var(--md-elevation-2);
+        max-inline-size: min(90%, 42ch);
+        margin-inline: auto;
+    }
+
+    @keyframes highlightPulse {
+        0%,
+        100% {
+            scale: 1;
+        }
+
+        50% {
+            scale: 1.02;
+        }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        #message.message-highlight {
+            /* Finite 2x pulse (<= 4s total) to avoid WCAG 2.2.2 persistent motion */
+            animation: highlightPulse 2s ease-in-out 2;
+        }
+    }
+
+    /* --- Countdown Timer --- */
+    #countdown-timer {
+        font-family: 'Nunito', sans-serif;
+        font-weight: 700;
+        margin-block: clamp(0.375rem, 1vmin, 0.625rem) 0;
+        font-size: clamp(1rem, 0.75rem + 1.3vmin, 1.25rem);
+        color: var(--accent-highlight);
+        text-shadow: 0 1px 8px rgba(255, 235, 59, 0.3);
+        min-block-size: clamp(1.25rem, 4vmin, 1.5625rem);
+    }
+
+    /* --- Button Container --- */
+    #button-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: clamp(0.625rem, 2vmin, 0.9375rem);
+        min-block-size: clamp(2.75rem, 8vmin, 3.125rem);
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        inline-size: 100%;
+        margin-block-start: clamp(0.5rem, 1.5vmin, 0.9375rem);
+    }
+
+    /* --- Buttons (M3 Expressive Tonal) --- */
+    #shuffle-button,
+    #external-link-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-block-size: var(--target-size);
+        min-inline-size: var(--target-size);
+        font-family: 'Nunito', sans-serif;
+        font-weight: 700;
+        padding-block: clamp(0.625rem, 2vmin, 0.875rem);
+        padding-inline: clamp(1.25rem, 4vmin, 1.75rem);
+        font-size: clamp(0.95rem, 0.75rem + 1vmin, 1.0625rem);
+        line-height: 1.2;
+        cursor: pointer;
+        border-radius: var(--md-radius-xl);
+        border: 1px solid transparent;
+        box-shadow: var(--md-elevation-1);
+        transition:
+            filter var(--md-duration-short) var(--md-easing),
+            scale var(--md-duration-short) var(--md-easing),
+            box-shadow var(--md-duration-short) var(--md-easing),
+            opacity var(--md-duration-medium) var(--md-easing);
+        text-decoration: none;
+        user-select: none;
+        -webkit-user-select: none;
+        letter-spacing: 0.03em;
+    }
+
+    #shuffle-button {
+        anchor-name: --preview-trigger;
+        background-color: var(--shuffle-bg);
+        color: var(--shuffle-fg);
+        -webkit-touch-callout: none;
+    }
+
+    #shuffle-button[data-mode="preview"] {
+        touch-action: none;
+    }
+
+    @supports (color: contrast-color(red)) {
+        #shuffle-button {
+            color: contrast-color(var(--shuffle-bg));
+        }
+    }
+
+    #shuffle-button:hover,
+    #shuffle-button:active,
+    #shuffle-button.button-active {
+        filter: brightness(0.9);
+        scale: 0.97;
+        box-shadow: var(--md-elevation-2);
+    }
+
+    #external-link-button {
+        background-color: var(--link-bg);
+        color: var(--link-fg);
+        opacity: 1;
+        translate: 0 0;
+        transition:
+            display var(--md-duration-long) var(--md-easing-emphasize),
+            opacity var(--md-duration-long) var(--md-easing-emphasize),
+            translate var(--md-duration-long) var(--md-easing-emphasize),
+            filter var(--md-duration-short) var(--md-easing),
+            scale var(--md-duration-short) var(--md-easing),
+            box-shadow var(--md-duration-short) var(--md-easing);
+        transition-behavior: allow-discrete;
+    }
+
+    @starting-style {
+        #external-link-button {
+            opacity: 0;
+            translate: 0 6px;
+        }
+    }
+
+    #external-link-button:hover,
+    #external-link-button:active,
+    #external-link-button.button-active {
+        background-color: var(--link-bg-hover);
+        filter: brightness(0.92);
+        scale: 0.97;
+        box-shadow: var(--md-elevation-2);
+    }
+
+    /* Focus-visible for keyboard accessibility */
+    #shuffle-button:focus-visible,
+    #external-link-button:focus-visible {
+        outline: 3px solid var(--focus-ring);
+        outline-offset: 3px;
+    }
+
+    /* --- Confetti --- */
+    .confetti-container {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 3;
+        overflow: hidden;
+        border-radius: var(--md-radius-xl);
+    }
+
+    .confetti-piece {
+        position: absolute;
+        inline-size: min(1.5vmin, 8px);
+        block-size: min(1.5vmin, 8px);
+        background-color: transparent;
+        border-radius: 50%;
+        opacity: 0;
+        transform: translate(-50%, -50%) rotateZ(0deg);
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .confetti-piece {
+            animation: fallConfetti 3s ease-in forwards;
+        }
+    }
+
+    @keyframes fallConfetti {
+        0% {
+            opacity: 0;
+            transform: translate(var(--start-x), var(--start-y)) rotateZ(0deg) scale(0.5);
+        }
+
+        10% {
+            opacity: 1;
+        }
+
+        100% {
+            opacity: 0;
+            transform: translate(var(--end-x), var(--end-y)) rotateZ(720deg) scale(1);
+        }
+    }
+
+    /* --- Layout: Solved Desktop Grid --- */
+    @media (max-width: 767px) {
+        .game-container.layout-solved #puzzle-container {
+            max-inline-size: min(80vmin, 54svh);
+            margin-block-end: 0;
+        }
+    }
+
+    @media (min-width: 768px) {
+        .game-container.layout-solved {
+            display: grid;
+            grid-template-columns: auto minmax(min(30vmin, 300px), min(40vmin, 400px));
+            grid-template-rows: 1fr auto;
+            grid-template-areas:
+                "puzzle message"
+                "buttons buttons";
+            gap: clamp(0.75rem, 2.5vmin, 1.25rem);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .game-container.layout-solved #puzzle-container {
+            grid-area: puzzle;
+            margin: 0;
+            align-self: center;
+        }
+
+        .game-container.layout-solved #message {
+            grid-area: message;
+            margin-block-start: 0;
+            text-align: start;
+            align-self: center;
+        }
+
+        .game-container.layout-solved #button-container {
+            grid-area: buttons;
+            justify-content: center;
+            margin-block-start: 0;
+        }
+    }
+
+    /* --- Preview Hint Popover Tooltip (M3 Tonal Surface) --- */
+    #preview-hint {
+        background: var(--md-surface-high);
+        backdrop-filter: var(--md-surface-blur);
+        -webkit-backdrop-filter: var(--md-surface-blur);
+        border: 1px solid var(--md-surface-border);
+        color: var(--md-on-surface);
+        padding-block: clamp(0.4rem, 1.2vmin, 0.625rem);
+        padding-inline: clamp(0.75rem, 2.5vmin, 1rem);
+        border-radius: var(--md-radius-lg);
+        font-family: 'Nunito', sans-serif;
+        font-weight: 600;
+        font-size: clamp(0.8rem, 0.7rem + 0.6vmin, 0.9rem);
+        white-space: nowrap;
+        box-shadow: var(--md-elevation-2);
+        opacity: 0;
+        translate: 0 4px;
+        transition:
+            display var(--md-duration-medium) var(--md-easing),
+            overlay var(--md-duration-medium) var(--md-easing),
+            opacity var(--md-duration-medium) var(--md-easing),
+            translate var(--md-duration-medium) var(--md-easing);
+        transition-behavior: allow-discrete;
+    }
+
+    #preview-hint:is(:popover-open, .\:popover-open, .fallback-open) {
+        opacity: 1;
+        translate: 0 0;
+    }
+
+    @starting-style {
+        #preview-hint:is(:popover-open, .\:popover-open, .fallback-open) {
+            opacity: 0;
+            translate: 0 4px;
+        }
+    }
+
+    @supports (position-area: block-start) and (anchor-name: --preview-trigger) {
+        #preview-hint[popover] {
+            position-anchor: --preview-trigger;
+            position-area: block-start;
+            position-try-fallbacks: flip-block;
+            inset: auto;
+            margin: 0 0 0.5rem 0;
+        }
+    }
+
+    @supports not ((position-area: block-start) and (anchor-name: --preview-trigger)) {
+        #preview-hint[popover] {
+            position: fixed;
+            inset-block-start: var(--hint-top, 50%);
+            inset-inline-start: var(--hint-left, 50%);
+            margin: 0;
+            transform: translate(-50%, calc(-100% - 8px));
+        }
+
+        #preview-hint:not([popover]) {
+            position: absolute;
+            inset-block-end: 100%;
+            inset-inline-start: 50%;
+            margin-block-end: 0.5rem;
+            transform: translateX(-50%);
+        }
+    }
+
+    /* --- Reduced Motion Overrides --- */
+    @media (prefers-reduced-motion: reduce) {
+        .tile {
+            transition:
+                border-color var(--md-duration-short) var(--md-easing),
+                opacity var(--md-duration-short) ease-in-out;
+        }
+
+        #shuffle-button,
+        #external-link-button,
+        #preview-hint {
+            transition:
+                opacity var(--md-duration-short) var(--md-easing),
+                filter var(--md-duration-short) var(--md-easing),
+                box-shadow var(--md-duration-short) var(--md-easing);
+        }
+
+        #shuffle-button:hover,
+        #shuffle-button:active,
+        #shuffle-button.button-active,
+        #external-link-button:hover,
+        #external-link-button:active,
+        #external-link-button.button-active {
+            scale: none;
+        }
+
+        #external-link-button,
+        #external-link-button[hidden],
+        #preview-hint {
+            translate: none;
+        }
+
+        @starting-style {
+            #external-link-button,
+            #preview-hint:is(:popover-open, .\:popover-open, .fallback-open) {
+                translate: none;
+            }
+        }
+    }
+
+    /* --- Forced Colors (Windows High Contrast) --- */
+    @media (forced-colors: active) {
+        #shuffle-button,
+        #external-link-button,
+        #preview-hint,
+        #message.message-highlight {
+            border: 1px solid ButtonText;
+            forced-color-adjust: auto;
+        }
+
+        .tile {
+            border-color: CanvasText;
+        }
+
+        .tile:focus-visible,
+        #shuffle-button:focus-visible,
+        #external-link-button:focus-visible {
+            outline-color: Highlight;
+        }
     }
 }
 
-#message.visible {
-    animation: fadeIn 0.8s var(--md-easing-emphasize) forwards;
-}
+@layer utilities {
+    [hidden] {
+        display: none;
+    }
 
-#external-link-button.visible {
-    animation: fadeIn 0.8s var(--md-easing-emphasize) forwards;
-}
-
-/* --- Preview Hint (M3 Tonal Surface) --- */
-#preview-hint {
-    position: absolute;
-    bottom: min(12vmin, 60px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--md-surface-high);
-    backdrop-filter: var(--md-surface-blur);
-    -webkit-backdrop-filter: var(--md-surface-blur);
-    border: 1px solid var(--md-surface-border);
-    color: var(--md-on-surface);
-    padding: min(2vmin, 10px) min(3vmin, 16px);
-    border-radius: var(--md-radius-lg);
-    font-family: 'Nunito', sans-serif;
-    font-weight: 600;
-    font-size: min(3.5vmin, 14px);
-    pointer-events: none;
-    white-space: nowrap;
-    opacity: 0;
-    visibility: hidden;
-    transition:
-        opacity var(--md-duration-medium) var(--md-easing),
-        transform var(--md-duration-medium) var(--md-easing);
-    z-index: 100;
-    box-shadow: var(--md-elevation-2);
-}
-
-#preview-hint::after {
-    content: '';
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    margin-left: -6px;
-    border-width: 6px;
-    border-style: solid;
-    border-color: var(--md-surface-high) transparent transparent transparent;
-}
-
-#preview-hint.visible {
-    opacity: 1;
-    visibility: visible;
-    transform: translateX(-50%) translateY(-5px);
+    #external-link-button[hidden] {
+        display: none;
+        opacity: 0;
+        translate: 0 6px;
+    }
 }

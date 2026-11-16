@@ -3,10 +3,16 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script';">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="text-scale" content="scale">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>Picture Puzzle – ¡A resolver el puzzle!</title>
     <meta name="description" content="Juego de puzzle deslizante – Resuelve el rompecabezas para revelar la imagen.">
-    <meta name="theme-color" content="#0a0a0f">
 
     <!-- Open Graph -->
     <meta property="og:title" content="Picture Puzzle">
@@ -25,29 +31,31 @@
 </head>
 
 <body>
-    <div id="background-blur"></div>
+    <div id="background-blur" aria-hidden="true"></div>
 
-    <h1>A resolver el puzzle</h1>
+    <main class="page-main">
+        <h1>A resolver el puzzle</h1>
 
-    <div class="game-container">
-        <div id="puzzle-container">
-            <div id="preview-image"></div>
-            <div class="confetti-container"></div>
+        <div class="game-container">
+            <div id="puzzle-container" role="group" aria-label="Tablero del puzzle 4 por 4">
+                <div id="preview-image" aria-hidden="true"></div>
+                <div class="confetti-container" aria-hidden="true"></div>
+            </div>
+            <p id="message" aria-live="polite" aria-atomic="true"></p>
+            <p id="countdown-timer" hidden></p>
+            <div id="button-container">
+                <button type="button" id="shuffle-button">Mezclar y Jugar</button>
+                <div id="preview-hint" popover="hint" role="tooltip">Mantén presionado</div>
+                <a href="https://borish127.github.io/picture-puzzle" target="_blank" rel="noopener noreferrer"
+                    id="external-link-button" hidden>
+                    Visitar Link
+                </a>
+            </div>
         </div>
-        <p id="message"></p>
-        <p id="countdown-timer" class="hidden"></p>
-        <div id="button-container">
-            <button id="shuffle-button">Mezclar y Jugar</button>
-            <div id="preview-hint" class="hidden">Mantén presionado</div>
-            <a href="https://borish127.github.io/picture-puzzle" target="_blank" id="external-link-button"
-                class="hidden">
-                Visitar Link
-            </a>
-        </div>
-    </div>
+    </main>
 
-    <script src="libs/color-thief.umd.js"></script>
-    <script src="script.js"></script>
+    <script defer src="libs/color-thief.umd.js"></script>
+    <script defer src="script.js"></script>
 </body>
 
 </html>

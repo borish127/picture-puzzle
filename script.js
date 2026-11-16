@@ -1,6 +1,7 @@
 /* ===================================================================
-   Picture Puzzle – Refactored Game Engine
-   Module pattern, consolidated state, M3 visual feedback
+   Picture Puzzle – Game Engine
+   Module pattern, Pointer Events, Spatial Keyboard Navigation,
+   WCAG Contrast, Popover Hint & Trusted-Types-Safe DOM Updates
    =================================================================== */
 
 const PuzzleGame = (() => {
@@ -14,9 +15,10 @@ const PuzzleGame = (() => {
         SHUFFLE_ITERATIONS: 300,
         COUNTDOWN_DELAY_MS: 60000,
         COUNTDOWN_DURATION_S: 60,
-        HINT_DISPLAY_MS: 1000,
+        HINT_DISPLAY_MS: 1800,
         SHORT_PRESS_THRESHOLD_MS: 100,
         SERIES_C_LINK_DELAY_MS: 4000,
+        WCAG_LUMINANCE_THRESHOLD: 0.17913,
     };
 
     const IMAGE_MAP = {
@@ -49,14 +51,23 @@ const PuzzleGame = (() => {
         hasWonOnce: false,
         countdownTimeout: null,
         countdownInterval: null,
+        linkRevealTimeout: null,
         previewPressStartTime: 0,
         hintTimeout: null,
-        touchStartX: 0,
-        touchStartY: 0,
+        activePointerId: null,
+        pointerStartX: 0,
+        pointerStartY: 0,
+        pointerStartTileIndex: -1,
+        suppressNextBoardClick: false,
+        shufflePointerId: null,
+        keyboardPreviewActive: false,
+        rovingPieceId: 1,
         winMessageText: '',
         imageId: null,
         isSeriesD: false,
         isSeriesC: false,
+        supportsPopover: false,
+        supportsAnchorPos: false,
     };
 
     // ── DOM REFS ────────────────────────────────────────────────────
@@ -70,21 +81,16 @@ const PuzzleGame = (() => {
         };
     }
 
-    function isMobileDevice() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-            || navigator.maxTouchPoints > 0;
+    function prefersReducedMotion() {
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     }
 
-    function isTouchInside(event, element) {
-        if (!event.changedTouches || event.changedTouches.length === 0) return false;
-        const touch = event.changedTouches[0];
-        const rect = element.getBoundingClientRect();
-        return (
-            touch.clientX >= rect.left &&
-            touch.clientX <= rect.right &&
-            touch.clientY >= rect.top &&
-            touch.clientY <= rect.bottom
-        );
+    function getRelativeLuminance(r, g, b) {
+        const [lr, lg, lb] = [r, g, b].map((channel) => {
+            const s = channel / 255;
+            return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
     }
 
     function isSolved() {
@@ -98,14 +104,14 @@ const PuzzleGame = (() => {
     function getImageUrlFromParams() {
         const urlParams = new URLSearchParams(window.location.search);
         const id = urlParams.get('id');
-        return IMAGE_MAP[id] || IMAGE_MAP['default'];
+        return (id && Object.hasOwn(IMAGE_MAP, id)) ? IMAGE_MAP[id] : IMAGE_MAP['default'];
     }
 
     function setPuzzleImage(imageUrl) {
         document.documentElement.style.setProperty('--puzzle-image', `url('${imageUrl}')`);
 
         const img = new Image();
-        img.crossOrigin = 'anonymous';
+        img.fetchPriority = 'high';
         img.src = imageUrl;
 
         // Timeout fallback if image never loads
@@ -118,10 +124,12 @@ const PuzzleGame = (() => {
             try {
                 const colorThief = new ColorThief();
                 const [r, g, b] = colorThief.getColor(img);
-                dom.shuffleButton.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
-
-                const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-                dom.shuffleButton.style.color = luminance > 0.5 ? '#1a1a2e' : '#ffffff';
+                const bg = `rgb(${r} ${g} ${b})`;
+                const fg = getRelativeLuminance(r, g, b) > CONFIG.WCAG_LUMINANCE_THRESHOLD
+                    ? '#1a1a2e'
+                    : '#ffffff';
+                dom.shuffleButton.style.setProperty('--shuffle-bg', bg);
+                dom.shuffleButton.style.setProperty('--shuffle-fg', fg);
             } catch (e) {
                 console.error('Error al procesar el color de la imagen:', e);
                 applyFallbackButtonColor();
@@ -142,31 +150,55 @@ const PuzzleGame = (() => {
     }
 
     function applyFallbackButtonColor() {
-        dom.shuffleButton.style.backgroundColor = '#007bff';
-        dom.shuffleButton.style.color = '#ffffff';
+        dom.shuffleButton.style.removeProperty('--shuffle-bg');
+        dom.shuffleButton.style.removeProperty('--shuffle-fg');
     }
 
     // ── PUZZLE PIECES ───────────────────────────────────────────────
     const pieceElements = {};
 
     function createPieces() {
+        const fragment = document.createDocumentFragment();
         for (let i = 1; i <= CONFIG.TILE_COUNT; i++) {
-            const piece = document.createElement('div');
+            const isPlayable = i < CONFIG.TILE_COUNT;
+            const piece = document.createElement(isPlayable ? 'button' : 'div');
+            if (isPlayable) {
+                piece.type = 'button';
+                piece.disabled = true;
+                piece.tabIndex = i === 1 ? 0 : -1;
+            } else {
+                piece.setAttribute('aria-hidden', 'true');
+            }
             piece.classList.add('tile');
+            piece.dataset.pieceId = String(i);
 
             const { row, col } = getRowCol(i - 1);
-            const xPercent = col * 100 / (CONFIG.GRID_SIZE - 1);
-            const yPercent = row * 100 / (CONFIG.GRID_SIZE - 1);
+            const xPercent = (col * 100) / (CONFIG.GRID_SIZE - 1);
+            const yPercent = (row * 100) / (CONFIG.GRID_SIZE - 1);
             piece.style.backgroundPosition = `${xPercent}% ${yPercent}%`;
 
             pieceElements[i] = piece;
-            dom.container.appendChild(piece);
+            fragment.appendChild(piece);
+        }
+        dom.container.appendChild(fragment);
+    }
+
+    function setTilesEnabled(enabled) {
+        for (let i = 1; i < CONFIG.TILE_COUNT; i++) {
+            pieceElements[i].disabled = !enabled;
         }
     }
 
+    function setRovingFocus(pieceId) {
+        if (!pieceElements[pieceId] || pieceId === CONFIG.TILE_COUNT) return;
+        for (let i = 1; i < CONFIG.TILE_COUNT; i++) {
+            pieceElements[i].tabIndex = i === pieceId ? 0 : -1;
+        }
+        state.rovingPieceId = pieceId;
+    }
+
     function updatePositions() {
-        // Clear corner classes
-        Object.values(pieceElements).forEach(el => {
+        Object.values(pieceElements).forEach((el) => {
             el.classList.remove('top-left-corner', 'top-right-corner', 'bottom-left-corner', 'bottom-right-corner');
         });
 
@@ -176,10 +208,17 @@ const PuzzleGame = (() => {
             const pieceElement = pieceElements[pieceId];
             const { row, col } = getRowCol(index);
 
-            pieceElement.style.top = `${row * 100 / CONFIG.GRID_SIZE}%`;
-            pieceElement.style.left = `${col * 100 / CONFIG.GRID_SIZE}%`;
+            pieceElement.style.setProperty('--row', String(row));
+            pieceElement.style.setProperty('--col', String(col));
+            pieceElement.dataset.index = String(index);
 
-            // Assign corner classes
+            if (pieceId < CONFIG.TILE_COUNT) {
+                pieceElement.setAttribute(
+                    'aria-label',
+                    `Pieza ${pieceId}, fila ${row + 1}, columna ${col + 1}`,
+                );
+            }
+
             if (index === 0) {
                 pieceElement.classList.add('top-left-corner');
             } else if (index === CONFIG.GRID_SIZE - 1) {
@@ -192,26 +231,27 @@ const PuzzleGame = (() => {
         });
     }
 
-
-
     // ── GAME LOGIC ──────────────────────────────────────────────────
     function initPuzzle() {
         state.isGameActive = false;
         dom.container.classList.remove('solved', 'show-preview');
-        dom.message.classList.remove('message-highlight');
-        dom.shuffleButton.classList.remove('hidden');
-        dom.hintElement.classList.remove('visible');
-        clearTimeout(state.hintTimeout);
+        dom.message.classList.remove('message-highlight', 'is-pending');
+        dom.shuffleButton.hidden = false;
+        dom.shuffleButton.removeAttribute('aria-describedby');
+        delete dom.shuffleButton.dataset.mode;
         dom.shuffleButton.textContent = 'Mezclar y Jugar';
-        dom.externalLinkButton.classList.add('hidden');
-        dom.countdownElement.classList.add('hidden');
+        hideHint();
+        clearTimeout(state.hintTimeout);
+        clearTimeout(state.linkRevealTimeout);
+        dom.externalLinkButton.hidden = true;
+        dom.countdownElement.hidden = true;
         clearTimeout(state.countdownTimeout);
         clearInterval(state.countdownInterval);
 
         state.tiles = [...FULL_STATE];
-        Object.values(pieceElements).forEach(el => {
-            el.style.display = 'block';
-            el.style.transform = 'none';
+        setTilesEnabled(false);
+        Object.values(pieceElements).forEach((el) => {
+            el.hidden = false;
             el.style.zIndex = '0';
         });
         updatePositions();
@@ -219,7 +259,7 @@ const PuzzleGame = (() => {
     }
 
     function moveTile(clickedIndex) {
-        if (!state.isGameActive) return;
+        if (!state.isGameActive || clickedIndex < 0 || clickedIndex >= CONFIG.TILE_COUNT) return;
 
         const emptyIndex = state.tiles.indexOf(0);
         const { row: clickedRow, col: clickedCol } = getRowCol(clickedIndex);
@@ -228,15 +268,13 @@ const PuzzleGame = (() => {
         let moved = false;
 
         if (clickedRow === emptyRow) {
-            // Same row — slide horizontally
-            const step = (clickedIndex < emptyIndex) ? 1 : -1;
+            const step = clickedIndex < emptyIndex ? 1 : -1;
             for (let i = emptyIndex; i !== clickedIndex; i -= step) {
                 state.tiles[i] = state.tiles[i - step];
             }
             moved = true;
         } else if (clickedCol === emptyCol) {
-            // Same column — slide vertically
-            const step = (clickedIndex < emptyIndex) ? CONFIG.GRID_SIZE : -CONFIG.GRID_SIZE;
+            const step = clickedIndex < emptyIndex ? CONFIG.GRID_SIZE : -CONFIG.GRID_SIZE;
             for (let i = emptyIndex; i !== clickedIndex; i -= step) {
                 state.tiles[i] = state.tiles[i - step];
             }
@@ -271,120 +309,112 @@ const PuzzleGame = (() => {
 
         state.isGameActive = false;
         state.hasWonOnce = true;
+        setTilesEnabled(false);
+        hidePreview();
+        hideHint();
+        dom.shuffleButton.removeAttribute('aria-describedby');
+        delete dom.shuffleButton.dataset.mode;
         dom.shuffleButton.textContent = 'Mezclar y Jugar';
 
-        // Stop countdowns
         clearTimeout(state.countdownTimeout);
         clearInterval(state.countdownInterval);
-        dom.countdownElement.classList.add('hidden');
+        clearTimeout(state.linkRevealTimeout);
+        dom.countdownElement.hidden = true;
 
         // --- FLIP ANIMATION ---
         const firstRect = dom.container.getBoundingClientRect();
 
-        // Apply solved visual state
         dom.container.classList.add('solved');
-        pieceElements[CONFIG.TILE_COUNT].style.display = 'block';
+        pieceElements[CONFIG.TILE_COUNT].hidden = false;
         pieceElements[CONFIG.TILE_COUNT].classList.add('bottom-right-corner');
 
-
-
-        // Prepare buttons (hidden but in layout for measurement)
-        dom.shuffleButton.classList.remove('hidden');
-        dom.shuffleButton.style.opacity = '0';
-
-        // Layout class for non-Series-D
         if (!state.isSeriesD) {
             dom.gameContainer.classList.add('layout-solved');
         }
 
         if (state.isSeriesC || !state.isSeriesD) {
-            dom.externalLinkButton.classList.add('hidden');
-            dom.externalLinkButton.classList.remove('visible');
+            dom.externalLinkButton.hidden = true;
         }
 
-        // Capture end position
         const lastRect = dom.container.getBoundingClientRect();
         const deltaX = firstRect.left - lastRect.left;
         const deltaY = firstRect.top - lastRect.top;
 
-        // Consolidated win-state trigger — called exactly once
         const triggerWinState = () => {
-            // Message
+            dom.message.classList.remove('is-pending');
             dom.message.textContent = state.winMessageText;
-            if (state.isSeriesC) dom.message.classList.add('message-highlight');
+            if (state.isSeriesC) {
+                dom.message.classList.add('message-highlight');
+            }
 
-            dom.message.style.visibility = 'visible';
-            dom.message.style.opacity = '1';
-
-            // External link visibility (delayed for Series C)
             const linkDelay = state.isSeriesC ? CONFIG.SERIES_C_LINK_DELAY_MS : 600;
-            setTimeout(() => {
-                dom.externalLinkButton.classList.remove('hidden');
-                dom.externalLinkButton.classList.add('visible');
+            state.linkRevealTimeout = setTimeout(() => {
+                dom.externalLinkButton.hidden = false;
             }, linkDelay);
 
-            // Show shuffle button
-            dom.shuffleButton.classList.remove('hidden');
-            dom.shuffleButton.style.opacity = '1';
+            dom.shuffleButton.disabled = false;
+            dom.shuffleButton.style.removeProperty('opacity');
         };
 
-        // Prepare message (hidden until animation finishes)
-        dom.message.style.opacity = '0';
-        dom.message.style.visibility = 'hidden';
-        dom.message.style.transition = 'opacity 0.5s ease-in-out';
+        dom.message.classList.add('is-pending');
         dom.message.textContent = state.winMessageText;
-
         if (state.isSeriesC) {
             dom.message.classList.add('message-highlight');
         }
 
-        // WAAPI animation only on desktop if there's movement
-        if (!isMobileDevice() && (deltaX !== 0 || deltaY !== 0)) {
-            const animation = dom.container.animate([
-                { transform: `translate(${deltaX}px, ${deltaY}px)` },
-                { transform: 'none' }
-            ], { duration: 800, easing: 'ease-in-out' });
+        if (!prefersReducedMotion() && (deltaX !== 0 || deltaY !== 0)) {
+            dom.shuffleButton.disabled = true;
+            dom.shuffleButton.style.opacity = '0';
+            const animation = dom.container.animate(
+                [
+                    { transform: `translate(${deltaX}px, ${deltaY}px)` },
+                    { transform: 'none' },
+                ],
+                { duration: 800, easing: 'ease-in-out' },
+            );
             animation.onfinish = triggerWinState;
+            animation.oncancel = triggerWinState;
         } else {
             triggerWinState();
         }
 
-        generateConfetti();
-
-
+        if (!prefersReducedMotion()) {
+            generateConfetti();
+        }
     }
 
     // ── SHUFFLE & START ─────────────────────────────────────────────
     function shuffleAndStart() {
         state.isGameActive = true;
         dom.shuffleButton.textContent = 'Preview';
+        dom.shuffleButton.dataset.mode = 'preview';
+        dom.shuffleButton.setAttribute('aria-describedby', 'preview-hint');
         dom.container.classList.remove('solved', 'show-preview');
-        dom.hintElement.classList.remove('visible');
+        hideHint();
         clearTimeout(state.hintTimeout);
-        dom.message.classList.remove('message-highlight');
+        clearTimeout(state.linkRevealTimeout);
+        dom.message.classList.remove('message-highlight', 'is-pending');
         dom.gameContainer.classList.remove('layout-solved');
 
-        Object.values(pieceElements).forEach(el => {
-            el.style.transform = 'none';
+        Object.values(pieceElements).forEach((el) => {
             el.style.zIndex = '0';
         });
 
         clearConfetti();
         clearTimeout(state.countdownTimeout);
         clearInterval(state.countdownInterval);
-        dom.countdownElement.classList.add('hidden');
+        dom.countdownElement.hidden = true;
 
-        // Countdown only for Series D (first win)
         if (!state.hasWonOnce && state.isSeriesD) {
             state.countdownTimeout = setTimeout(() => {
                 startCountdown();
             }, CONFIG.COUNTDOWN_DELAY_MS);
         }
 
-        pieceElements[CONFIG.TILE_COUNT].style.display = 'none';
+        pieceElements[CONFIG.TILE_COUNT].hidden = true;
         state.tiles = [...SOLVED_STATE];
 
-        // Fisher-Yates-like random moves to ensure solvability
+        // Random valid moves from solved state guarantee solvability
         for (let i = 0; i < CONFIG.SHUFFLE_ITERATIONS; i++) {
             const emptyIndex = state.tiles.indexOf(0);
             const movableIndices = getMovableTiles(emptyIndex);
@@ -392,6 +422,8 @@ const PuzzleGame = (() => {
             [state.tiles[randomIndex], state.tiles[emptyIndex]] = [state.tiles[emptyIndex], state.tiles[randomIndex]];
         }
 
+        setTilesEnabled(true);
+        setRovingFocus(state.tiles.find((id) => id > 0) || 1);
         updatePositions();
 
         if (!state.hasWonOnce) {
@@ -402,7 +434,7 @@ const PuzzleGame = (() => {
     // ── COUNTDOWN ───────────────────────────────────────────────────
     function startCountdown() {
         let timeLeft = CONFIG.COUNTDOWN_DURATION_S;
-        dom.countdownElement.classList.remove('hidden');
+        dom.countdownElement.hidden = false;
         updateCountdownText(timeLeft);
 
         state.countdownInterval = setInterval(() => {
@@ -411,8 +443,8 @@ const PuzzleGame = (() => {
 
             if (timeLeft <= 0) {
                 clearInterval(state.countdownInterval);
-                dom.countdownElement.classList.add('hidden');
-                dom.externalLinkButton.classList.remove('hidden');
+                dom.countdownElement.hidden = true;
+                dom.externalLinkButton.hidden = false;
             }
         }, 1000);
     }
@@ -434,6 +466,7 @@ const PuzzleGame = (() => {
         clearConfetti();
         const containerWidth = dom.container.offsetWidth;
         const containerHeight = dom.container.offsetHeight;
+        const fragment = document.createDocumentFragment();
 
         for (let i = 0; i < 50; i++) {
             const piece = document.createElement('div');
@@ -453,48 +486,188 @@ const PuzzleGame = (() => {
             piece.style.animationDelay = `${Math.random() * 0.5}s`;
             piece.style.animationDuration = `${2 + Math.random()}s`;
 
-            dom.confettiContainer.appendChild(piece);
+            fragment.appendChild(piece);
         }
+        dom.confettiContainer.appendChild(fragment);
     }
 
     function clearConfetti() {
-        dom.confettiContainer.innerHTML = '';
+        dom.confettiContainer.replaceChildren();
     }
 
-    // ── EVENT HANDLERS ──────────────────────────────────────────────
+    // ── PREVIEW & TOOLTIP HELPERS ───────────────────────────────────
+    function showPreview() {
+        if (!state.isGameActive) return;
+        dom.container.classList.add('show-preview');
+        hideHint();
+        clearTimeout(state.hintTimeout);
+    }
 
-    // Touch: Swipe to move tiles
-    function onContainerTouchStart(event) {
-        if (!isMobileDevice() || !state.isGameActive) return;
-        if (event.changedTouches.length > 0) {
-            state.touchStartX = event.changedTouches[0].clientX;
-            state.touchStartY = event.changedTouches[0].clientY;
+    function hidePreview() {
+        dom.container.classList.remove('show-preview');
+    }
+
+    function positionHintFallback() {
+        if (!state.supportsPopover || state.supportsAnchorPos) return;
+        const rect = dom.shuffleButton.getBoundingClientRect();
+        dom.hintElement.style.setProperty('--hint-top', `${rect.top}px`);
+        dom.hintElement.style.setProperty('--hint-left', `${rect.left + rect.width / 2}px`);
+    }
+
+    function showHint() {
+        if (!state.isGameActive) return;
+        positionHintFallback();
+        if (state.supportsPopover) {
+            if (!dom.hintElement.matches(':popover-open')) {
+                dom.hintElement.showPopover();
+            }
+        } else {
+            dom.hintElement.hidden = false;
+            dom.hintElement.classList.add('fallback-open');
         }
     }
 
-    function onContainerTouchEnd(event) {
-        if (!isMobileDevice() || !state.isGameActive || event.changedTouches.length === 0) return;
+    function hideHint() {
+        clearTimeout(state.hintTimeout);
+        if (state.supportsPopover) {
+            if (dom.hintElement.matches(':popover-open')) {
+                dom.hintElement.hidePopover();
+            }
+        } else {
+            dom.hintElement.classList.remove('fallback-open');
+            dom.hintElement.hidden = true;
+        }
+    }
 
-        const touchEndX = event.changedTouches[0].clientX;
-        const touchEndY = event.changedTouches[0].clientY;
-        const deltaX = touchEndX - state.touchStartX;
-        const deltaY = touchEndY - state.touchStartY;
+    function showHintBriefly() {
+        showHint();
+        clearTimeout(state.hintTimeout);
+        state.hintTimeout = setTimeout(() => {
+            hideHint();
+        }, CONFIG.HINT_DISPLAY_MS);
+    }
 
-        if (Math.abs(deltaX) < CONFIG.SWIPE_THRESHOLD && Math.abs(deltaY) < CONFIG.SWIPE_THRESHOLD) return;
+    // ── SPATIAL KEYBOARD NAVIGATION ─────────────────────────────────
+    function findSpatialCandidate(current, direction) {
+        const candidates = Array.from(
+            dom.container.querySelectorAll('button.tile:not(:disabled)'),
+        ).filter((el) => el !== current && (typeof el.checkVisibility !== 'function' || el.checkVisibility()));
 
-        const absX = Math.abs(deltaX);
-        const absY = Math.abs(deltaY);
+        if (candidates.length === 0) return null;
+
+        const curRect = current.getBoundingClientRect();
+        const curCenterX = (curRect.left + curRect.right) / 2;
+        const curCenterY = (curRect.top + curRect.bottom) / 2;
+        const tolerance = 2;
+
+        const directional = [];
+        for (const el of candidates) {
+            const rect = el.getBoundingClientRect();
+            let gap = -1;
+            let overlaps = false;
+            let perpOffset = 0;
+
+            if (direction === 'ArrowRight' && rect.left >= curRect.right - tolerance) {
+                gap = Math.max(0, rect.left - curRect.right);
+                overlaps = curRect.top < rect.bottom - tolerance && rect.top < curRect.bottom - tolerance;
+                perpOffset = Math.abs((rect.top + rect.bottom) / 2 - curCenterY);
+            } else if (direction === 'ArrowLeft' && rect.right <= curRect.left + tolerance) {
+                gap = Math.max(0, curRect.left - rect.right);
+                overlaps = curRect.top < rect.bottom - tolerance && rect.top < curRect.bottom - tolerance;
+                perpOffset = Math.abs((rect.top + rect.bottom) / 2 - curCenterY);
+            } else if (direction === 'ArrowDown' && rect.top >= curRect.bottom - tolerance) {
+                gap = Math.max(0, rect.top - curRect.bottom);
+                overlaps = curRect.left < rect.right - tolerance && rect.left < curRect.right - tolerance;
+                perpOffset = Math.abs((rect.left + rect.right) / 2 - curCenterX);
+            } else if (direction === 'ArrowUp' && rect.bottom <= curRect.top + tolerance) {
+                gap = Math.max(0, curRect.top - rect.bottom);
+                overlaps = curRect.left < rect.right - tolerance && rect.left < curRect.right - tolerance;
+                perpOffset = Math.abs((rect.left + rect.right) / 2 - curCenterX);
+            }
+
+            if (gap >= 0) {
+                directional.push({ el, gap, overlaps, perpOffset });
+            }
+        }
+
+        if (directional.length === 0) return null;
+
+        const aligned = directional.filter((c) => c.overlaps);
+        if (aligned.length > 0) {
+            aligned.sort((a, b) => (a.gap - b.gap) || (a.perpOffset - b.perpOffset));
+            return aligned[0].el;
+        }
+
+        directional.sort((a, b) => (a.gap + 2 * a.perpOffset) - (b.gap + 2 * b.perpOffset));
+        return directional[0].el;
+    }
+
+    function onContainerKeyDown(event) {
+        if (
+            !state.isGameActive ||
+            event.defaultPrevented ||
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey
+        ) {
+            return;
+        }
+
+        if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+            return;
+        }
+
+        const current = event.composedPath()[0];
+        if (!(current instanceof HTMLButtonElement) || !current.classList.contains('tile')) {
+            return;
+        }
+
+        const nextTile = findSpatialCandidate(current, event.key);
+        if (!nextTile) return;
+
+        event.preventDefault();
+        setRovingFocus(Number(nextTile.dataset.pieceId));
+        nextTile.focus();
+        nextTile.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+
+    // ── POINTER & CLICK HANDLERS ────────────────────────────────────
+    function getBoardIndexFromPoint(clientX, clientY) {
         const rect = dom.container.getBoundingClientRect();
-        const startRelX = state.touchStartX - rect.left;
-        const startRelY = state.touchStartY - rect.top;
-
-        if (startRelX < 0 || startRelX > rect.width || startRelY < 0 || startRelY > rect.height) return;
-
-        const dynamicTileSize = rect.width / CONFIG.GRID_SIZE;
-        const col = Math.floor(startRelX / dynamicTileSize);
-        const row = Math.floor(startRelY / dynamicTileSize);
+        const relX = clientX - rect.left;
+        const relY = clientY - rect.top;
+        if (relX < 0 || relX >= rect.width || relY < 0 || relY >= rect.height) {
+            return -1;
+        }
+        const tileSize = rect.width / CONFIG.GRID_SIZE;
+        const col = Math.floor(relX / tileSize);
+        const row = Math.floor(relY / tileSize);
         const index = row * CONFIG.GRID_SIZE + col;
+        return index >= 0 && index < CONFIG.TILE_COUNT ? index : -1;
+    }
 
+    function onContainerPointerDown(event) {
+        if (!state.isGameActive || !event.isPrimary) return;
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+        state.activePointerId = event.pointerId;
+        state.pointerStartX = event.clientX;
+        state.pointerStartY = event.clientY;
+        state.pointerStartTileIndex = getBoardIndexFromPoint(event.clientX, event.clientY);
+    }
+
+    function onContainerPointerUp(event) {
+        if (!state.isGameActive || event.pointerId !== state.activePointerId) return;
+        state.activePointerId = null;
+
+        const deltaX = event.clientX - state.pointerStartX;
+        const deltaY = event.clientY - state.pointerStartY;
+        if (Math.abs(deltaX) < CONFIG.SWIPE_THRESHOLD && Math.abs(deltaY) < CONFIG.SWIPE_THRESHOLD) {
+            return;
+        }
+
+        const index = state.pointerStartTileIndex;
         if (index < 0 || index >= CONFIG.TILE_COUNT) return;
 
         const emptyIndex = state.tiles.indexOf(0);
@@ -503,11 +676,10 @@ const PuzzleGame = (() => {
 
         const dRow = emptyRow - tileRow;
         const dCol = emptyCol - tileCol;
-
-        if ((Math.abs(dRow) + Math.abs(dCol)) !== 1) return;
+        if (Math.abs(dRow) + Math.abs(dCol) !== 1) return;
 
         let matches = false;
-        if (absX > absY) {
+        if (Math.abs(deltaX) > Math.abs(deltaY)) {
             if (deltaX > 0 && dCol > 0) matches = true;
             if (deltaX < 0 && dCol < 0) matches = true;
         } else {
@@ -516,119 +688,118 @@ const PuzzleGame = (() => {
         }
 
         if (matches) {
-            event.preventDefault();
+            state.suppressNextBoardClick = true;
+            queueMicrotask(() => { state.suppressNextBoardClick = false; });
+            const pieceId = state.tiles[index];
+            if (pieceId > 0) setRovingFocus(pieceId);
             moveTile(index);
         }
     }
 
-    // Click: Desktop tile movement
+    function onContainerPointerCancel(event) {
+        if (event.pointerId === state.activePointerId) {
+            state.activePointerId = null;
+        }
+    }
+
     function onContainerClick(event) {
+        if (state.suppressNextBoardClick) {
+            state.suppressNextBoardClick = false;
+            return;
+        }
         if (!state.isGameActive) return;
-        const rect = dom.container.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        const dynamicTileSize = rect.width / CONFIG.GRID_SIZE;
-        const col = Math.floor(x / dynamicTileSize);
-        const row = Math.floor(y / dynamicTileSize);
-        const clickedIndex = row * CONFIG.GRID_SIZE + col;
+
+        const tileBtn = event.target.closest('button.tile');
+        if (!tileBtn || !dom.container.contains(tileBtn)) return;
+
+        const pieceId = Number(tileBtn.dataset.pieceId);
+        const clickedIndex = Number(tileBtn.dataset.index);
+        setRovingFocus(pieceId);
         moveTile(clickedIndex);
     }
 
-    // Shuffle button: click
+    // ── SHUFFLE / PREVIEW BUTTON HANDLERS ───────────────────────────
     function onShuffleClick() {
         if (!state.isGameActive) {
             shuffleAndStart();
         }
     }
 
-    // Preview: mouse hold
-    function onShuffleMouseDown() {
-        if (state.isGameActive) {
-            dom.container.classList.add('show-preview');
-            state.previewPressStartTime = Date.now();
-            dom.hintElement.classList.remove('visible');
-            clearTimeout(state.hintTimeout);
-        }
-    }
+    function onShufflePointerDown(event) {
+        if (!event.isPrimary) return;
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
 
-    function onShuffleMouseUp() {
-        if (state.isGameActive) {
-            dom.container.classList.remove('show-preview');
-            const duration = Date.now() - state.previewPressStartTime;
-            if (duration < CONFIG.SHORT_PRESS_THRESHOLD_MS) {
-                showHintBriefly();
-            }
-        }
-    }
-
-    function onShuffleMouseLeave() {
-        if (state.isGameActive) {
-            dom.container.classList.remove('show-preview');
-        }
-    }
-
-    // Preview: touch hold
-    function onShuffleTouchStart(event) {
-        event.preventDefault();
+        state.shufflePointerId = event.pointerId;
         dom.shuffleButton.classList.add('button-active');
+        try {
+            dom.shuffleButton.setPointerCapture(event.pointerId);
+        } catch {
+            // Ignore if synthetic pointer cannot be captured
+        }
+
         if (state.isGameActive) {
-            dom.container.classList.add('show-preview');
-            state.previewPressStartTime = Date.now();
-            dom.hintElement.classList.remove('visible');
-            clearTimeout(state.hintTimeout);
+            state.previewPressStartTime = performance.now();
+            showPreview();
         }
     }
 
-    function onShuffleTouchEnd(event) {
+    function onShufflePointerUp(event) {
+        if (event.pointerId !== state.shufflePointerId) return;
+        state.shufflePointerId = null;
         dom.shuffleButton.classList.remove('button-active');
-        const touchWasInside = isTouchInside(event, dom.shuffleButton);
+
         if (state.isGameActive) {
-            dom.container.classList.remove('show-preview');
-            const duration = Date.now() - state.previewPressStartTime;
+            hidePreview();
+            const duration = performance.now() - state.previewPressStartTime;
             if (duration < CONFIG.SHORT_PRESS_THRESHOLD_MS) {
                 showHintBriefly();
             }
-        } else if (touchWasInside) {
-            shuffleAndStart();
         }
     }
 
-    function onShuffleTouchCancel() {
+    function onShufflePointerCancel(event) {
+        if (event.pointerId !== state.shufflePointerId) return;
+        state.shufflePointerId = null;
         dom.shuffleButton.classList.remove('button-active');
-        if (state.isGameActive) {
-            dom.container.classList.remove('show-preview');
+        hidePreview();
+    }
+
+    function onShuffleKeyDown(event) {
+        if (!state.isGameActive) return;
+        if (event.key === 'Escape') {
+            hideHint();
+            return;
+        }
+        if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+            if (event.key === ' ') event.preventDefault();
+            state.keyboardPreviewActive = true;
+            dom.shuffleButton.classList.add('button-active');
+            showPreview();
         }
     }
 
-    function showHintBriefly() {
-        dom.hintElement.classList.add('visible');
-        clearTimeout(state.hintTimeout);
-        state.hintTimeout = setTimeout(() => {
-            dom.hintElement.classList.remove('visible');
-        }, CONFIG.HINT_DISPLAY_MS);
-    }
-
-    // External link button: touch
-    function onExternalTouchStart(event) {
-        event.preventDefault();
-        dom.externalLinkButton.classList.add('button-active');
-    }
-
-    function onExternalTouchEnd(event) {
-        event.preventDefault();
-        dom.externalLinkButton.classList.remove('button-active');
-        if (isTouchInside(event, dom.externalLinkButton)) {
-            const url = dom.externalLinkButton.href;
-            setTimeout(() => { window.location.href = url; }, 100);
+    function onShuffleKeyUp(event) {
+        if (!state.keyboardPreviewActive) return;
+        if (event.key === ' ' || event.key === 'Enter') {
+            state.keyboardPreviewActive = false;
+            dom.shuffleButton.classList.remove('button-active');
+            hidePreview();
         }
     }
 
-    function onExternalTouchCancel(event) {
-        event.preventDefault();
-        dom.externalLinkButton.classList.remove('button-active');
+    function onShuffleBlur() {
+        state.keyboardPreviewActive = false;
+        dom.shuffleButton.classList.remove('button-active');
+        hidePreview();
+        hideHint();
     }
 
-    // Page show: reset button states
+    function onDocumentKeyDown(event) {
+        if (event.key === 'Escape') {
+            hideHint();
+        }
+    }
+
     function onPageShow() {
         dom.shuffleButton.blur();
         dom.externalLinkButton.blur();
@@ -636,9 +807,34 @@ const PuzzleGame = (() => {
         dom.externalLinkButton.classList.remove('button-active');
     }
 
+    // ── POPOVER HINT FEATURE SETUP ──────────────────────────────────
+    function setupHintPopover() {
+        state.supportsPopover = Object.hasOwn(HTMLElement.prototype, 'popover');
+        state.supportsAnchorPos = typeof CSS !== 'undefined' &&
+            typeof CSS.supports === 'function' &&
+            CSS.supports('position-area: block-start') &&
+            CSS.supports('anchor-name: --preview-trigger');
+
+        if (!state.supportsPopover) {
+            dom.hintElement.removeAttribute('popover');
+            dom.hintElement.hidden = true;
+            return;
+        }
+
+        // Fallback for browsers with Popover API but without popover="hint" (e.g., Safari)
+        const probe = document.createElement('div');
+        probe.popover = 'hint';
+        if (probe.popover !== 'hint') {
+            document.addEventListener('beforetoggle', (event) => {
+                if (event.target === dom.hintElement && event.newState === 'open') {
+                    dom.hintElement.popover = 'auto';
+                }
+            }, true);
+        }
+    }
+
     // ── INITIALIZATION ──────────────────────────────────────────────
     function init() {
-        // Cache DOM references
         dom.container = document.getElementById('puzzle-container');
         dom.message = document.getElementById('message');
         dom.shuffleButton = document.getElementById('shuffle-button');
@@ -648,13 +844,15 @@ const PuzzleGame = (() => {
         dom.gameContainer = document.querySelector('.game-container');
         dom.hintElement = document.getElementById('preview-hint');
 
-        // Determine series from URL
+        setupHintPopover();
+
+        // Determine series from URL safely (own-property check avoids prototype lookups)
         const urlParams = new URLSearchParams(window.location.search);
         state.imageId = urlParams.get('id');
-        state.isSeriesD = !!(state.imageId && IMAGE_MAP[state.imageId] && state.imageId !== 'default' && !state.imageId.startsWith('c'));
-        state.isSeriesC = !!(state.imageId && state.imageId.startsWith('c'));
+        const hasValidId = !!(state.imageId && Object.hasOwn(IMAGE_MAP, state.imageId));
+        state.isSeriesC = hasValidId && state.imageId.startsWith('c');
+        state.isSeriesD = hasValidId && state.imageId !== 'default' && !state.isSeriesC;
 
-        // Determine win text & link
         const linkParaSerieD = 'https://kelly-boris-boda.borish127.com/?grupo=damas';
         const linkParaSerieC = 'https://kelly-boris-boda.borish127.com/?grupo=caballeros';
         const linkParaDefault = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
@@ -674,28 +872,63 @@ const PuzzleGame = (() => {
             state.winMessageText = textoParaDefault;
         }
 
-        // Create pieces and set image
         createPieces();
         const initialImageUrl = getImageUrlFromParams();
         setPuzzleImage(initialImageUrl);
 
-        // Bind events
-        dom.container.addEventListener('touchstart', onContainerTouchStart, { passive: false });
-        dom.container.addEventListener('touchend', onContainerTouchEnd);
+        // Board events
+        dom.container.addEventListener('pointerdown', onContainerPointerDown);
+        dom.container.addEventListener('pointerup', onContainerPointerUp);
+        dom.container.addEventListener('pointercancel', onContainerPointerCancel);
         dom.container.addEventListener('click', onContainerClick);
+        dom.container.addEventListener('keydown', onContainerKeyDown);
 
+        // Shuffle / Preview button events
         dom.shuffleButton.addEventListener('click', onShuffleClick);
-        dom.shuffleButton.addEventListener('mousedown', onShuffleMouseDown);
-        dom.shuffleButton.addEventListener('mouseup', onShuffleMouseUp);
-        dom.shuffleButton.addEventListener('mouseleave', onShuffleMouseLeave);
-        dom.shuffleButton.addEventListener('touchstart', onShuffleTouchStart, { passive: false });
-        dom.shuffleButton.addEventListener('touchend', onShuffleTouchEnd);
-        dom.shuffleButton.addEventListener('touchcancel', onShuffleTouchCancel);
+        dom.shuffleButton.addEventListener('pointerdown', onShufflePointerDown);
+        dom.shuffleButton.addEventListener('pointerup', onShufflePointerUp);
+        dom.shuffleButton.addEventListener('pointercancel', onShufflePointerCancel);
+        dom.shuffleButton.addEventListener('touchstart', (event) => {
+            if (state.isGameActive) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+        dom.shuffleButton.addEventListener('contextmenu', (event) => {
+            if (state.isGameActive) {
+                event.preventDefault();
+            }
+        });
+        dom.shuffleButton.addEventListener('keydown', onShuffleKeyDown);
+        dom.shuffleButton.addEventListener('keyup', onShuffleKeyUp);
+        dom.shuffleButton.addEventListener('blur', onShuffleBlur);
 
-        dom.externalLinkButton.addEventListener('touchstart', onExternalTouchStart, { passive: false });
-        dom.externalLinkButton.addEventListener('touchend', onExternalTouchEnd);
-        dom.externalLinkButton.addEventListener('touchcancel', onExternalTouchCancel);
+        // Keep tooltip hoverable & keyboard-focusable (WCAG 1.4.13)
+        dom.shuffleButton.addEventListener('pointerenter', (event) => {
+            if (state.isGameActive && event.pointerType === 'mouse') {
+                showHint();
+            }
+        });
+        dom.shuffleButton.addEventListener('focus', () => {
+            if (state.isGameActive && dom.shuffleButton.matches(':focus-visible')) {
+                showHint();
+            }
+        });
+        dom.shuffleButton.addEventListener('pointerleave', (event) => {
+            if (event.pointerType === 'mouse') {
+                setTimeout(() => {
+                    if (!dom.hintElement.matches(':hover') && !dom.shuffleButton.matches(':hover')) {
+                        hideHint();
+                    }
+                }, 100);
+            }
+        });
+        dom.hintElement.addEventListener('pointerleave', (event) => {
+            if (event.pointerType === 'mouse' && !dom.shuffleButton.matches(':hover')) {
+                hideHint();
+            }
+        });
 
+        document.addEventListener('keydown', onDocumentKeyDown);
         window.addEventListener('pageshow', onPageShow);
     }
 
